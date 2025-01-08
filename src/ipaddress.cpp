@@ -1,0 +1,160 @@
+#include "ipaddress.hpp"
+
+#include "ethernet_interface.hpp"
+#include "network_manager.hpp"
+#include "util.hpp"
+
+#include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/lg2.hpp>
+#include <xyz/openbmc_project/Common/error.hpp>
+
+#include <stdexcept>
+#include <string>
+#include <string_view>
+
+namespace phosphor
+{
+namespace network
+{
+
+using namespace phosphor::logging;
+using namespace sdbusplus::xyz::openbmc_project::Common::Error;
+using NotAllowed = sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed;
+using Reason = xyz::openbmc_project::Common::NotAllowed::REASON;
+
+static auto makeObjPath(std::string_view root, stdplus::SubnetAny addr)
+{
+    auto ret = sdbusplus::message::object_path(std::string(root));
+    stdplus::ToStrHandle<stdplus::ToStr<stdplus::SubnetAny>> tsh;
+    ret /= tsh(addr);
+    return ret;
+}
+
+template <typename T>
+struct Proto
+{};
+
+template <>
+struct Proto<stdplus::In4Addr>
+{
+    static inline constexpr auto value = IP::Protocol::IPv4;
+};
+
+template <>
+struct Proto<stdplus::In6Addr>
+{
+    static inline constexpr auto value = IP::Protocol::IPv6;
+};
+
+IPAddress::IPAddress(sdbusplus::bus_t& bus, std::string_view objRoot,
+                     stdplus::PinnedRef<EthernetInterface> parent,
+                     stdplus::SubnetAny addr, AddressOrigin origin,
+                     uint8_t idx) :
+    IPAddress(bus, makeObjPath(objRoot, addr), parent, addr, origin, idx)
+{}
+
+IPAddress::IPAddress(sdbusplus::bus_t& bus,
+                     sdbusplus::message::object_path objPath,
+                     stdplus::PinnedRef<EthernetInterface> parent,
+                     stdplus::SubnetAny addr, AddressOrigin origin,
+                     uint8_t idx) :
+    IPIfaces(bus, objPath.str.c_str(), IPIfaces::action::defer_emit),
+    parent(parent), objPath(std::move(objPath))
+{
+    IP::address(stdplus::toStr(addr.getAddr()), true);
+    IP::prefixLength(addr.getPfx(), true);
+    IP::type(std::visit([](auto v) { return Proto<decltype(v)>::value; },
+                        addr.getAddr()),
+             true);
+    IP::origin(origin, true);
+    IP::idx(idx, true);
+    emit_object_added();
+
+#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
+    if (type() == IP::Protocol::IPv4 &&
+        IP::origin() != IP::AddressOrigin::LinkLocal)
+    {
+        execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
+                parent.get().interfaceName().c_str(), "UP");
+    }
+    else if (type() == IP::Protocol::IPv6 &&
+             IP::origin() != IP::AddressOrigin::LinkLocal)
+    {
+        execute("/usr/bin/ipv6-advanced-route.sh", "ipv6-advanced-route.sh",
+                parent.get().interfaceName().c_str(), "UP");
+    }
+
+#endif
+}
+
+IPAddress::~IPAddress()
+{
+#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
+    if (type() == IP::Protocol::IPv4 &&
+        IP::origin() != IP::AddressOrigin::LinkLocal)
+    {
+        execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
+                parent.get().interfaceName().c_str(), "DOWN");
+    }
+    else if (type() == IP::Protocol::IPv6 &&
+             IP::origin() != IP::AddressOrigin::LinkLocal)
+    {
+        execute("/usr/bin/ipv6-advanced-route.sh", "ipv6-advanced-route.sh",
+                parent.get().interfaceName().c_str(), "DOWN");
+    }
+#endif
+}
+
+std::string IPAddress::address(std::string /*ipAddress*/)
+{
+    elog<NotAllowed>(Reason("Property update is not allowed"));
+}
+uint8_t IPAddress::idx(uint8_t /*value*/)
+{
+    elog<NotAllowed>(Reason("Property update is not allowed"));
+}
+uint8_t IPAddress::prefixLength(uint8_t /*value*/)
+{
+    elog<NotAllowed>(Reason("Property update is not allowed"));
+}
+std::string IPAddress::gateway(std::string /*gateway*/)
+{
+    elog<NotAllowed>(Reason("Property update is not allowed"));
+}
+IP::Protocol IPAddress::type(IP::Protocol /*type*/)
+{
+    elog<NotAllowed>(Reason("Property update is not allowed"));
+}
+IP::AddressOrigin IPAddress::origin(IP::AddressOrigin /*origin*/)
+{
+    elog<NotAllowed>(Reason("Property update is not allowed"));
+}
+void IPAddress::delete_()
+{
+    if (origin() != IP::AddressOrigin::Static)
+    {
+        lg2::error("Tried to delete a non-static address {NET_IP} prefix "
+                   "{NET_PFX} interface {NET_INTF}",
+                   "NET_IP", address(), "NET_PFX", prefixLength(), "NET_INTF",
+                   parent.get().interfaceName());
+    }
+
+    std::unique_ptr<IPAddress> ptr;
+    auto& addrs = parent.get().addrs;
+    for (auto it = addrs.begin(); it != addrs.end(); ++it)
+    {
+        if (it->second.get() == this)
+        {
+            ptr = std::move(it->second);
+            addrs.erase(it);
+            parent.get().delIpIdx(this->address(), this->type());
+            break;
+        }
+    }
+
+    parent.get().writeConfigurationFile();
+    parent.get().manager.get().reloadConfigs();
+}
+
+} // namespace network
+} // namespace phosphor

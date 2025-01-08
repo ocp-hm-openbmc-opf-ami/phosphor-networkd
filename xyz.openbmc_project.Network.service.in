@@ -1,0 +1,15 @@
+[Unit]
+Description=Phosphor Network Manager
+After=systemd-networkd.service
+
+[Service]
+ExecStart=/usr/bin/phosphor-network-manager
+Restart=always
+Type=dbus
+BusName=@DEFAULT_BUSNAME@
+RuntimeDirectory=network
+RuntimeDirectoryPreserve=yes
+StateDirectory=network
+
+[Install]
+WantedBy=@SYSTEMD_TARGET@

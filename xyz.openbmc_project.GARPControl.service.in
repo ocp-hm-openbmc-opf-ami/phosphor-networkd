@@ -1,0 +1,9 @@
+[Unit]
+Description=Phosphor GARP Control
+After=systemd-networkd.service xyz.openbmc_project.Network.service
+[Service]
+ExecStart=/usr/bin/env phosphor-garpcontrol
+SyslogIdentifier=phosphor-garpcontrol
+
+[Install]
+WantedBy=@SYSTEMD_TARGET@

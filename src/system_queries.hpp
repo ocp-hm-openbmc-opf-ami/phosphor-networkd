@@ -1,0 +1,28 @@
+#pragma once
+#include "types.hpp"
+
+#include <stdplus/zstring_view.hpp>
+
+#include <cstdint>
+#include <string_view>
+
+namespace phosphor::network::system
+{
+struct EthInfo
+{
+    bool autoneg;
+    unsigned char duplex;
+    uint16_t speed;
+};
+EthInfo getEthInfo(stdplus::zstring_view ifname);
+
+void setLink(stdplus::zstring_view ifname, unsigned short speed,
+             unsigned char duplex, unsigned char autoneg);
+
+void setMTU(std::string_view ifname, unsigned mtu);
+
+void setNICUp(std::string_view ifname, bool up);
+
+void deleteIntf(unsigned idx);
+
+} // namespace phosphor::network::system

@@ -1,0 +1,699 @@
+#include "config.h"
+
+#include "firewall_configuration.hpp"
+
+#include "config_parser.hpp"
+#include "ethernet_interface.hpp"
+#include "network_manager.hpp"
+#include "types.hpp"
+#include "util.hpp"
+
+#include <arpa/inet.h>
+#include <fmt/compile.h>
+#include <fmt/format.h>
+#include <sys/stat.h>
+
+#include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/lg2.hpp>
+#include <xyz/openbmc_project/Common/error.hpp>
+
+#include <cstdlib>
+#include <fstream>
+#include <unistd.h>
+#include <iostream>
+
+namespace phosphor
+{
+namespace network
+{
+using namespace phosphor::network;
+using namespace phosphor::logging;
+namespace firewall
+{
+
+Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
+                             Manager& parent) :
+    Iface(bus, path.c_str(), Iface::action::defer_emit),
+    bus(bus), manager(parent)
+{
+    // Initial Rules File Path
+    execute("/usr/sbin/iptables", "iptables", "-F");
+    execute("/usr/sbin/ip6tables", "ip6tables", "-F");
+    appendPreloadRules<in_addr>();
+    appendPreloadRules<in6_addr>();
+    rulesLists.push_back(
+        fmt::format("{}/{}", AMI_IPTABLES_DIR, IPTABLES_RULES));
+    rulesLists.push_back(
+        fmt::format("{}/{}", AMI_IPTABLES_DIR, IP6TABLES_RULES));
+    rulesLists.push_back(
+        fmt::format("{}/{}", CUSTOM_IPTABLES_DIR, IPTABLES_RULES));
+    rulesLists.push_back(
+        fmt::format("{}/{}", CUSTOM_IPTABLES_DIR, IP6TABLES_RULES));
+
+    // Write preload rules into files
+    writeConfigurationFile<in_addr>(true);
+    writeConfigurationFile<in6_addr>(true);
+
+    // Restore Custom Rules
+    restoreConfigurationFile<in_addr>();
+    restoreConfigurationFile<in6_addr>();
+    emit_object_added();
+}
+
+/** @brief Implementation for AddRule
+ *  Add the rule with incoming parameters
+ */
+int16_t Configuration::addRule(FirewallIface::Target target, uint8_t control,
+                               FirewallIface::Protocol protocol,
+                               std::string startIPAddress,
+                               std::string endIPAddress, uint16_t startPort,
+                               uint16_t endPort, std::string macAddress,
+                               std::string startTime, std::string stopTime)
+{
+    int16_t ret = 0;
+    auto customIPv4rules = 0, customIPv6rules = 0;
+    if (control == (uint8_t)ControlBit::TIMEOUT ||
+        (control > (uint8_t)ControlBit::TIMEOUT &&
+         (control & (uint8_t)ControlBit::IP) == 0 &&
+         (control & (uint8_t)ControlBit::MAC) == 0 &&
+         (control & (uint8_t)ControlBit::PORT) == 0 &&
+         (control & (uint8_t)ControlBit::PROTOCOL) == 0))
+    {
+        return -1;
+    } // if
+
+    for(const auto& elementTuple : getRules(FirewallIface::IP::IPV4))
+    {
+        if(!std::get<0>(elementTuple)) customIPv4rules++;
+    }
+    for(const auto& elementTuple : getRules(FirewallIface::IP::IPV6))
+    {
+        if(!std::get<0>(elementTuple)) customIPv6rules++;
+    }
+
+    if (startIPAddress.find(".") != std::string::npos &&
+         customIPv4rules >= MAX_RULE_NUM)
+    {
+        return -1;
+    } // if
+    else if (startIPAddress.find(":") != std::string::npos &&
+         customIPv6rules >= MAX_RULE_NUM)
+    {
+        return -1;
+    } // else if
+
+    if (!endIPAddress.empty() &&
+        !((startIPAddress.find(":") == std::string::npos &&
+           endIPAddress.find(":") == std::string::npos) ||
+          (startIPAddress.find(".") == std::string::npos &&
+           endIPAddress.find(".") == std::string::npos)))
+    {
+        log<level::ERR>(
+            fmt::format(
+                "Type of IP Range are different. Start IP Address: {} End IP Address: {}\n",
+                startIPAddress, endIPAddress)
+                .c_str());
+        return -1;
+    } // if
+
+    std::string params = fmt::format(
+        "-A INPUT -j {}",
+        target == FirewallIface::Target::ACCEPT ? "ACCEPT" : "DROP");
+
+    if (startIPAddress.find(":") == std::string::npos)
+    {
+        if ((control & (uint8_t)ControlBit::PROTOCOL) ==
+            (uint8_t)ControlBit::PROTOCOL)
+        {
+            params = params + " -p " +
+                     (protocol == FirewallIface::Protocol::TCP    ? "tcp"
+                      : protocol == FirewallIface::Protocol::UDP  ? "udp"
+                      : protocol == FirewallIface::Protocol::ICMP ? "icmp"
+                                                                  : "all");
+        } // if
+    }     // if
+    else if (startIPAddress.find(":") != std::string::npos)
+    {
+        if ((control & (uint8_t)ControlBit::PROTOCOL) ==
+            (uint8_t)ControlBit::PROTOCOL)
+        {
+            params = params + " -p " +
+                     (protocol == FirewallIface::Protocol::TCP    ? "tcp"
+                      : protocol == FirewallIface::Protocol::UDP  ? "udp"
+                      : protocol == FirewallIface::Protocol::ICMP ? "icmpv6"
+                                                                  : "all");
+        } // if
+    }
+
+    if ((control & (uint8_t)ControlBit::IP) == (uint8_t)ControlBit::IP)
+    {
+        std::variant<in_addr, in6_addr> addr1, addr2;
+        if (startIPAddress.find(":") != std::string::npos &&
+            endIPAddress.find(":") != std::string::npos)
+        {
+            in6_addr tmp1, tmp2;
+            inet_pton(AF_INET6, startIPAddress.c_str(), &tmp1);
+            if (!endIPAddress.empty())
+            {
+                inet_pton(AF_INET6, endIPAddress.c_str(), &tmp2);
+                for (int i = 0; i < 4; i++)
+                {
+                    try
+                    {
+                        if (ntohl(tmp1.s6_addr32[i]) > ntohl(tmp2.s6_addr32[i]))
+                        {
+                            log<level::ERR>(
+                                fmt::format(
+                                    "Incorrect IP Range. Start IP Address: {} End IP Address: {}\n",
+                                    startIPAddress, endIPAddress)
+                                    .c_str());
+                            return -1;
+                        }
+                    }
+                    catch (std::exception& e)
+                    {
+                        log<level::ERR>(
+                            fmt::format("error = {}\n", e.what()).c_str());
+                    }
+                }
+            }
+
+            addr1 = tmp1;
+            addr2 = tmp2;
+        } // if
+        else if (startIPAddress.find(".") != std::string::npos &&
+                 endIPAddress.find(".") != std::string::npos)
+        {
+            in_addr tmp1, tmp2;
+            inet_pton(AF_INET, startIPAddress.c_str(), &tmp1);
+            if (!endIPAddress.empty())
+            {
+                inet_pton(AF_INET, endIPAddress.c_str(), &tmp2);
+                if (ntohl(tmp1.s_addr) > ntohl(tmp2.s_addr))
+                {
+                    log<level::ERR>(
+                        fmt::format(
+                            "Incorrect IP Range. Start IP Address: {} End IP Address: {}\n",
+                            startIPAddress, endIPAddress)
+                            .c_str());
+                    return -1;
+                }
+            }
+            addr1 = tmp1;
+            addr2 = tmp2;
+        }
+
+        if (endIPAddress.empty() ||
+            memcmp(&addr1, &addr2, sizeof(std::variant<in_addr, in6_addr>)) ==
+                0)
+        {
+            params += " -s " + startIPAddress;
+        } // if
+        else
+        {
+            params += fmt::format(" -m iprange --src-range {}-{} ",
+                                  startIPAddress, endIPAddress);
+            ;
+        }
+    } // if
+
+    if ((control & (uint8_t)ControlBit::PORT) == (uint8_t)ControlBit::PORT)
+    {
+        if ((control & (uint8_t)ControlBit::PROTOCOL) !=
+                (uint8_t)ControlBit::PROTOCOL ||
+            protocol == FirewallIface::Protocol::ICMP || startPort == 0)
+        {
+            return -1;
+        }
+
+        params += fmt::format(" --dport {}:{} ", startPort,
+                              endPort != 0 ? endPort : MAX_PORT_NUM);
+    } // if
+
+    if ((control & (uint8_t)ControlBit::MAC) == (uint8_t)ControlBit::MAC)
+    {
+        params += " -m mac --mac-source " + macAddress;
+    } // if
+
+    if ((control & (uint8_t)ControlBit::TIMEOUT) ==
+        (uint8_t)ControlBit::TIMEOUT)
+    {
+        if (!startTime.empty())
+            params += " -m time --datestart " + startTime;
+        if (!stopTime.empty())
+            params += " -m time --datestop " + stopTime;
+    } // if
+
+    if ((control & (uint8_t)ControlBit::IP) != (uint8_t)ControlBit::IP)
+    {
+        ret = runSystemCommand("iptables", params);
+        if (auto index = params.find("icmp"); index != std::string::npos)
+            params.replace(index, 4, "icmpv6");
+        ret |= runSystemCommand("ip6tables", params);
+    } // if
+    else
+    {
+        if (startIPAddress.find(":") == std::string::npos)
+        {
+            ret = runSystemCommand("iptables", params);
+        } // if
+        else
+        {
+            ret = runSystemCommand("ip6tables", params);
+        }
+    } // else
+
+    writeConfigurationFile<in_addr>(false);
+    writeConfigurationFile<in6_addr>(false);
+
+    return ret;
+}
+
+/** @brief Implementation for DelRule
+ *  Delete the rule with incoming parameters
+ */
+int16_t Configuration::delRule(FirewallIface::Target target, uint8_t control,
+                               FirewallIface::Protocol protocol,
+                               std::string startIPAddress,
+                               std::string endIPAddress, uint16_t startPort,
+                               uint16_t endPort, std::string macAddress,
+                               std::string startTime, std::string stopTime)
+{
+    int16_t ret;
+    if (control == (uint8_t)ControlBit::TIMEOUT ||
+        (control > (uint8_t)ControlBit::TIMEOUT &&
+         (control & (uint8_t)ControlBit::IP) == 0 &&
+         (control & (uint8_t)ControlBit::MAC) == 0 &&
+         (control & (uint8_t)ControlBit::PORT) == 0 &&
+         (control & (uint8_t)ControlBit::PROTOCOL) == 0))
+    {
+        return -1;
+    } // if
+
+    if (!endIPAddress.empty() &&
+        !(startIPAddress.find(":") == std::string::npos &&
+              endIPAddress.find(":") == std::string::npos ||
+          startIPAddress.find(".") == std::string::npos &&
+              endIPAddress.find(".") == std::string::npos))
+    {
+        log<level::ERR>(
+            fmt::format(
+                "Type of IP Range are different. Start IP Address: {} End IP Address: {}\n",
+                startIPAddress, endIPAddress)
+                .c_str());
+        return -1;
+    } // if
+
+    std::string params = fmt::format(
+        "-D INPUT -j {}",
+        target == FirewallIface::Target::ACCEPT ? "ACCEPT" : "DROP");
+
+    if (startIPAddress.find(":") == std::string::npos)
+    {
+        if ((control & (uint8_t)ControlBit::PROTOCOL) ==
+            (uint8_t)ControlBit::PROTOCOL)
+        {
+            params = params + " -p " +
+                     (protocol == FirewallIface::Protocol::TCP    ? "tcp"
+                      : protocol == FirewallIface::Protocol::UDP  ? "udp"
+                      : protocol == FirewallIface::Protocol::ICMP ? "icmp"
+                                                                  : "all");
+        }
+    } // if
+    else if (startIPAddress.find(":") != std::string::npos)
+    {
+        if ((control & (uint8_t)ControlBit::PROTOCOL) ==
+            (uint8_t)ControlBit::PROTOCOL)
+        {
+            params = params + " -p " +
+                     (protocol == FirewallIface::Protocol::TCP    ? "tcp"
+                      : protocol == FirewallIface::Protocol::UDP  ? "udp"
+                      : protocol == FirewallIface::Protocol::ICMP ? "icmpv6"
+                                                                  : "all");
+        } // if
+    }
+
+    if ((control & (uint8_t)ControlBit::IP) == (uint8_t)ControlBit::IP)
+    {
+        std::variant<in_addr, in6_addr> addr1, addr2;
+        if (startIPAddress.find(":") != std::string::npos &&
+            endIPAddress.find(":") != std::string::npos)
+        {
+            in6_addr tmp1, tmp2;
+            inet_pton(AF_INET6, startIPAddress.c_str(), &tmp1);
+            if (!endIPAddress.empty())
+            {
+                inet_pton(AF_INET6, endIPAddress.c_str(), &tmp2);
+                for (int i = 0; i < 4; i++)
+                {
+                    try
+                    {
+                        if (ntohl(tmp1.s6_addr32[i]) > ntohl(tmp2.s6_addr32[i]))
+                        {
+                            log<level::ERR>(
+                                fmt::format(
+                                    "Incorrect IP Range. Start IP Address: {} End IP Address: {}\n",
+                                    startIPAddress, endIPAddress)
+                                    .c_str());
+                            return -1;
+                        }
+                    }
+                    catch (std::exception& e)
+                    {
+                        log<level::ERR>(
+                            fmt::format("error = {}\n", e.what()).c_str());
+                    }
+                }
+            }
+
+            addr1 = tmp1;
+            addr2 = tmp2;
+        } // if
+        else if (startIPAddress.find(".") != std::string::npos &&
+                 endIPAddress.find(".") != std::string::npos)
+        {
+            in_addr tmp1, tmp2;
+            inet_pton(AF_INET, startIPAddress.c_str(), &tmp1);
+            if (!endIPAddress.empty())
+            {
+                inet_pton(AF_INET, endIPAddress.c_str(), &tmp2);
+                if (ntohl(tmp1.s_addr) > ntohl(tmp2.s_addr))
+                {
+                    log<level::ERR>(
+                        fmt::format(
+                            "Incorrect IP Range. Start IP Address: {} End IP Address: {}\n",
+                            startIPAddress, endIPAddress)
+                            .c_str());
+                    return -1;
+                }
+            }
+            addr1 = tmp1;
+            addr2 = tmp2;
+        }
+
+        if (endIPAddress.empty() ||
+            memcmp(&addr1, &addr2, sizeof(std::variant<in_addr, in6_addr>)) ==
+                0)
+        {
+            params += " -s " + startIPAddress;
+        } // if
+        else
+        {
+            params += fmt::format(" -m iprange --src-range {}-{} ",
+                                  startIPAddress, endIPAddress);
+            ;
+        }
+    } // if
+
+    if ((control & (uint8_t)ControlBit::PORT) == (uint8_t)ControlBit::PORT)
+    {
+        if ((control & (uint8_t)ControlBit::PROTOCOL) !=
+                (uint8_t)ControlBit::PROTOCOL ||
+            protocol == FirewallIface::Protocol::ICMP)
+        {
+            return -1;
+        }
+        params += fmt::format(" --dport {}:{} ", startPort,
+                              endPort != 0 ? endPort : MAX_PORT_NUM);
+    } // if
+
+    if ((control & (uint8_t)ControlBit::MAC) == (uint8_t)ControlBit::MAC)
+    {
+        params += " -m mac --mac-source " + macAddress;
+    } // if
+
+    if ((control & (uint8_t)ControlBit::TIMEOUT) ==
+        (uint8_t)ControlBit::TIMEOUT)
+    {
+        if (!startTime.empty())
+            params += " -m time --datestart " + startTime;
+        if (!stopTime.empty())
+            params += " -m time --datestop " + stopTime;
+    } // if
+
+    if ((control & (uint8_t)ControlBit::IP) != (uint8_t)ControlBit::IP)
+    {
+        ret = runSystemCommand("iptables", params);
+        ret |= runSystemCommand("ip6tables", params);
+    } // if
+    else
+    {
+        if (startIPAddress.find(":") == std::string::npos)
+        {
+            ret = runSystemCommand("iptables", params);
+        } // if
+        else
+        {
+            ret = runSystemCommand("ip6tables", params);
+        }
+    } // else
+
+    writeConfigurationFile<in_addr>(false);
+    writeConfigurationFile<in6_addr>(false);
+    return ret;
+}
+
+/** @brief Implementation for FlushAll
+ *  Delete all the rules
+ */
+int16_t Configuration::flushAll(FirewallIface::IP ip)
+{
+    switch (ip)
+    {
+        case FirewallIface::IP::IPV4:
+            execute("/usr/sbin/iptables", "iptables", "-F");
+            appendPreloadRules<in_addr>();
+            writeConfigurationFile<in_addr>(false);
+            break;
+        case FirewallIface::IP::IPV6:
+            execute("/usr/sbin/ip6tables", "ip6tables", "-F");
+            appendPreloadRules<in6_addr>();
+            writeConfigurationFile<in6_addr>(false);
+            break;
+        case FirewallIface::IP::BOTH:
+            execute("/usr/sbin/iptables", "iptables", "-F");
+            execute("/usr/sbin/ip6tables", "ip6tables", "-F");
+            appendPreloadRules<in_addr>();
+            appendPreloadRules<in6_addr>();
+            writeConfigurationFile<in_addr>(false);
+            writeConfigurationFile<in6_addr>(false);
+            break;
+        default:
+            log<level::INFO>("Error input.");
+            return -1;
+    }
+
+    return 0;
+}
+
+/** @brief Implementation for GetRules
+ *  Get all the rules
+ */
+std::vector<IPTableElementTuple> Configuration::getRules(FirewallIface::IP ip)
+{
+    std::ifstream ruleFile;
+    std::vector<IPTableElementTuple> returnVec;
+#if 1
+    if (ip == FirewallIface::IP::IPV4)
+        writeConfigurationFile<in_addr>(false);
+    else if (ip == FirewallIface::IP::IPV6)
+        writeConfigurationFile<in6_addr>(false);
+
+    for (auto elememt : rulesLists)
+    {
+        if (ip == FirewallIface::IP::IPV4 &&
+            elememt.find(IP6TABLES_RULES) != std::string::npos)
+            continue;
+        if (ip == FirewallIface::IP::IPV6 &&
+            elememt.find(IPTABLES_RULES) != std::string::npos)
+            continue;
+        ruleFile.open(elememt, std::fstream::in);
+        if (ruleFile.is_open())
+        {
+            for (std::string line; std::getline(ruleFile, line);)
+            {
+                if (!line.starts_with("-A"))
+                    continue;
+                if (line == "COMMIT")
+                    break;
+                std::vector<std::string> vec = splitStr(line, " ");
+                IPTableElementTuple element;
+                std::get<3>(element) = FirewallIface::Protocol::UNSPECIFIED;
+                for (int i = 0; i < vec.size(); i++)
+                {
+                    if (vec.at(i) == "--comment")
+                    {
+                        i++;
+                        if (vec.at(i).find("Preload") != std::string::npos)
+                        {
+                            std::get<0>(element) = true;
+                        } // if
+                    }     // if
+                    else if (vec.at(i) == "-j")
+                    {
+                        i++;
+                        std::get<1>(element) =
+                            vec.at(i) == "ACCEPT"
+                                ? FirewallIface::Target::ACCEPT
+                                : FirewallIface::Target::DROP;
+                    } // else if
+                    else if (vec.at(i) == "-p")
+                    {
+                        i++;
+                        std::get<3>(element) =
+                            vec.at(i) == "tcp"   ? FirewallIface::Protocol::TCP
+                            : vec.at(i) == "udp" ? FirewallIface::Protocol::UDP
+                            : (vec.at(i) == "icmp" || vec.at(i) == "ipv6-icmp")
+                                ? FirewallIface::Protocol::ICMP
+                                : FirewallIface::Protocol::ALL;
+                        std::get<2>(element) |= (uint8_t)ControlBit::PROTOCOL;
+                    } // else if
+                    else if (vec.at(i) == "-s")
+                    {
+                        i++;
+                        std::get<4>(element) = vec.at(i);
+                        std::get<2>(element) |= (uint8_t)ControlBit::IP;
+                    } // else if
+                    else if (vec.at(i) == "--src-range")
+                    {
+                        i++;
+                        auto ips = splitStr(vec.at(i), "-");
+                        std::get<4>(element) = ips.at(0);
+                        std::get<5>(element) = ips.at(1);
+                        std::get<2>(element) |= (uint8_t)ControlBit::IP;
+                    } // else if
+                    else if (vec.at(i) == "--dport")
+                    {
+                        i++;
+                        if (vec.at(i).find(":") != std::string::npos)
+                        {
+                            auto ports = splitStr(vec.at(i), ":");
+                            std::get<6>(element) = std::stoi(ports.at(0));
+                            std::get<7>(element) = std::stoi(ports.at(1));
+                        } // if
+                        else
+                        {
+                            std::get<6>(element) = std::stoi(vec.at(i));
+                            std::get<7>(element) = std::stoi(vec.at(i));
+                        } // else
+                        std::get<2>(element) |= (uint8_t)ControlBit::PORT;
+                    } // else if
+                    else if (vec.at(i) == "--mac-source")
+                    {
+                        i++;
+                        std::get<8>(element) = vec.at(i);
+                        std::get<2>(element) |= (uint8_t)ControlBit::MAC;
+                    } // else if
+                    else if (vec.at(i) == "--datestart")
+                    {
+                        i++;
+                        std::get<9>(element) = vec.at(i);
+                        std::get<2>(element) |= (uint8_t)ControlBit::TIMEOUT;
+                    } // else if
+                    else if (vec.at(i) == "--datestop")
+                    {
+                        i++;
+                        std::get<10>(element) = vec.at(i);
+                        std::get<2>(element) |= (uint8_t)ControlBit::TIMEOUT;
+                    } // else if
+                }     // for
+                returnVec.push_back(element);
+            }
+            ruleFile.close();
+        }
+    }
+
+#endif
+    return returnVec;
+}
+
+template <typename T>
+void Configuration::writeConfigurationFile(bool isInit)
+{
+    const char* command;
+    const char* logFilePath;
+    std::string logFilePathStr;
+
+    if (typeid(T) == typeid(in6_addr))
+    {
+        if (isInit)
+        {
+            command = "ip6tables-save | grep -E '^(:|#|\\*|.*COMMIT.*|.*Preload.*)'";
+            logFilePathStr = std::string(AMI_IPTABLES_DIR) + "/" + std::string(IP6TABLES_RULES);
+            logFilePath = logFilePathStr.c_str();
+            executeCommandAndLog(command, logFilePath);
+        }
+        else
+        {
+            command = "ip6tables-save | grep -v Preload";
+            logFilePathStr = std::string(CUSTOM_IPTABLES_DIR) + "/" + std::string(IP6TABLES_RULES);
+            logFilePath = logFilePathStr.c_str();
+            executeCommandAndLog(command, logFilePath);
+        }
+    } // if
+    else
+    {
+        if (isInit)
+        {
+            command = "iptables-save | grep -E '^(:|#|\\*|.*COMMIT.*|.*Preload.*)'";
+            logFilePathStr = std::string(AMI_IPTABLES_DIR) + "/" + std::string(IPTABLES_RULES);
+            logFilePath = logFilePathStr.c_str();
+            executeCommandAndLog(command, logFilePath);
+        }
+        else
+        {
+            command = "iptables-save | grep -v Preload";
+            logFilePathStr = std::string(CUSTOM_IPTABLES_DIR) + "/" + std::string(IPTABLES_RULES);
+            logFilePath = logFilePathStr.c_str();
+            executeCommandAndLog(command, logFilePath);
+        }
+    } // else
+}
+
+template <typename T>
+void Configuration::restoreConfigurationFile()
+{
+    if (typeid(T) == typeid(in6_addr))
+    {
+        if (fs::exists(
+                fmt::format("{}/{}", CUSTOM_IPTABLES_DIR, IP6TABLES_RULES)
+                    .c_str()))
+            (void)runSystemCommand("ip6tables-restore", fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR, IP6TABLES_RULES).c_str());
+    } // if
+    else
+    {
+        if (fs::exists(
+                fmt::format("{}/{}", CUSTOM_IPTABLES_DIR, IP6TABLES_RULES)
+                    .c_str()))
+            (void)runSystemCommand("iptables-restore", fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR, IPTABLES_RULES).c_str());
+    } // else
+}
+
+template <typename T>
+void Configuration::appendPreloadRules()
+{
+#if SYSTEM_FIREWALL_SUPPORT
+    if (typeid(T) == typeid(in_addr))
+    {
+        // Add IPv4 Preload Rules here
+        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 8 -j DROP -m comment --comment \"Preload\"");
+
+        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 13 -j DROP -m comment --comment \"Preload\"");
+
+        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 14 -j DROP -m comment --comment \"Preload\"");
+
+        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 11 -j DROP -m comment --comment \"Preload\"");
+
+        (void)runSystemCommand("iptables", "-A OUTPUT -p icmp --icmp-type 11 -j DROP -m comment --comment \"Preload\"");
+    } // if
+    else
+    {
+        // Add IPv6 Preload Rules here
+        (void)runSystemCommand("ip6tables", "-A INPUT -p icmpv6 --icmpv6-type 128 -j DROP -m comment --comment \"Preload\"");
+    } // else
+#endif
+}
+
+} // namespace firewall
+} // namespace network
+} // namespace phosphor

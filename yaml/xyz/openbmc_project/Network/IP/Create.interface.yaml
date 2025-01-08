@@ -1,0 +1,64 @@
+description: >
+methods:
+    - name: IP
+      description: >
+          Create ipaddress object.
+      parameters:
+          - name: ProtocolType
+            type: enum[xyz.openbmc_project.Network.IP.Protocol]
+            description: >
+                protocol type can be IPv4 or IPv6 etc.
+          - name: Address
+            type: string
+            description: >
+                IP Address.
+          - name: PrefixLength
+            type: byte
+            description: >
+                Prefix Length.
+          - name: Gateway
+            type: string
+            description: >
+                Gateway Address.
+      returns:
+          - name: Path
+            type: object_path
+            description: >
+                The path for the created ipaddress object.
+      errors:
+          - xyz.openbmc_project.Common.Error.InvalidArgument
+          - xyz.openbmc_project.Common.Error.NotAllowed
+    - name: IPWithIndex
+      description: >
+         Create ipaddress object with index.
+      parameters:
+          - name: ProtocolType
+            type: enum[xyz.openbmc_project.Network.IP.Protocol]
+            description: >
+                protocol type can be IPv4 or IPv6 etc.
+          - name: Address
+            type: string
+            description: >
+                IP Address.
+          - name: PrefixLength
+            type: byte
+            description: >
+                Prefix Length.
+          - name: idx
+            type: byte
+            description: >
+                Default index is 0.
+                Index value for IPv4 is 0.
+                Index value for IPv6.
+          - name: Gateway
+            type: string
+            description: >
+                Gateway Address.
+      returns:
+          - name: Path
+            type: object_path
+            description: >
+                The path for the created ipaddress object.
+      errors:
+          - xyz.openbmc_project.Common.Error.InvalidArgument
+          - xyz.openbmc_project.Common.Error.NotAllowed

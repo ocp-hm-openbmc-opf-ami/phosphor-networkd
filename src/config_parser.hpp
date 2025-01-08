@@ -1,0 +1,222 @@
+#pragma once
+
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <map>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
+namespace phosphor
+{
+namespace network
+{
+namespace config
+{
+
+using Sectionstr = std::string;
+using KeyValueMapstr = std::multimap<std::string, std::string>;
+using ValueListstr = std::vector<std::string>;
+
+/** @brief Compare in (case insensitive) vs expected (sensitive) */
+bool icaseeq(std::string_view in, std::string_view expected) noexcept;
+/** @brief Turns a systemd bool string into a c++ bool */
+std::optional<bool> parseBool(std::string_view in) noexcept;
+std::optional<int> parseInt(std::string_view in) noexcept;
+
+namespace fs = std::filesystem;
+
+enum class ReturnCode
+{
+    SUCCESS = 0x0,
+    SECTION_NOT_FOUND = 0x1,
+    KEY_NOT_FOUND = 0x2,
+};
+
+fs::path pathForIntfConf(const fs::path& dir, std::string_view intf);
+fs::path pathForIntfDev(const fs::path& dir, std::string_view intf);
+fs::path pathForIntfInfo(const fs::path& dir, std::string_view intf);
+
+template <typename T, typename Check>
+class Checked
+{
+  public:
+    struct unchecked
+    {};
+
+    template <typename... Args>
+    constexpr Checked(Args&&... args) : t(conCheck(std::forward<Args>(args)...))
+    {}
+
+    template <typename... Args>
+    constexpr Checked(unchecked, Args&&... args) :
+        t(std::forward<Args>(args)...)
+    {}
+
+    constexpr const T& get() const noexcept
+    {
+        return t;
+    }
+
+    constexpr operator const T&() const noexcept
+    {
+        return t;
+    }
+
+    template <typename T2, typename Check2>
+    constexpr bool operator==(const Checked<T2, Check2>& rhs) const noexcept
+    {
+        static_assert(std::is_same_v<Check2, Check>);
+        return t == rhs.t;
+    }
+
+    constexpr bool operator==(const auto& rhs) const noexcept
+    {
+        return t == rhs;
+    }
+
+  private:
+    T t;
+
+    template <typename... Args>
+    static constexpr T conCheck(Args&&... args)
+    {
+        T t(std::forward<Args>(args)...);
+        Check{}(t);
+        return t;
+    }
+};
+
+struct KeyCheck
+{
+    void operator()(std::string_view s);
+};
+struct SectionCheck
+{
+    void operator()(std::string_view s);
+};
+struct ValueCheck
+{
+    void operator()(std::string_view s);
+};
+
+struct string_hash : public std::hash<std::string_view>
+{
+    using is_transparent = void;
+
+    template <typename T>
+    inline size_t operator()(const Checked<std::string, T>& t) const
+    {
+        return static_cast<const std::hash<std::string_view>&>(*this)(t.get());
+    }
+    template <typename T>
+    inline size_t operator()(const T& t) const
+    {
+        return static_cast<const std::hash<std::string_view>&>(*this)(t);
+    }
+};
+
+using Key = Checked<std::string, KeyCheck>;
+using Section = Checked<std::string, SectionCheck>;
+using Value = Checked<std::string, ValueCheck>;
+using ValueList = std::vector<Value>;
+using KeyValuesMap =
+    std::unordered_map<Key, ValueList, string_hash, std::equal_to<>>;
+using KeyValuesMapList = std::vector<KeyValuesMap>;
+using SectionMapInt =
+    std::unordered_map<Section, KeyValuesMapList, string_hash, std::equal_to<>>;
+
+class SectionMap : public SectionMapInt
+{
+  public:
+    const std::string* getLastValueString(std::string_view section,
+                                          std::string_view key) const noexcept;
+    inline auto getValues(std::string_view section, std::string_view key,
+                          auto&& conv) const
+    {
+        std::vector<std::invoke_result_t<decltype(conv), const Value&>> values;
+        auto sit = find(section);
+        if (sit == end())
+        {
+            return values;
+        }
+        for (const auto& secv : sit->second)
+        {
+            auto kit = secv.find(key);
+            if (kit == secv.end())
+            {
+                continue;
+            }
+            for (auto v : kit->second)
+            {
+                values.push_back(conv(v));
+            }
+        }
+        return values;
+    }
+    std::vector<std::string> getValueStrings(std::string_view section,
+                                             std::string_view key) const;
+};
+
+class Parser
+{
+  public:
+    SectionMap map;
+
+    Parser() = default;
+
+    /** @brief Constructor
+     *  @param[in] filename - Absolute path of the file which will be parsed.
+     */
+    Parser(const fs::path& filename);
+
+    /** @brief Determine if the loaded file exists */
+    inline bool getFileExists() const noexcept
+    {
+        return fileExists;
+    }
+
+    /** @brief Determine if there were warnings parsing the file
+     *  @return The number of parsing issues in the file
+     */
+
+    std::tuple<ReturnCode, ValueListstr> getValues(const std::string& section,
+                                                   const std::string& key);
+    inline const std::vector<std::string>& getWarnings() const noexcept
+    {
+        return warnings;
+    }
+
+    /** @brief Get the filename last parsed successfully
+     *  @return file path
+     */
+    inline const fs::path& getFilename() const noexcept
+    {
+        return filename;
+    }
+
+    /** @brief Set the file name and parse it.
+     *  @param[in] filename - Absolute path of the file.
+     */
+    void setFile(const fs::path& filename);
+
+    /** @brief Write the current config to a file */
+    void writeFile() const;
+    void writeFile(const fs::path& filename);
+
+  private:
+    bool fileExists = false;
+    fs::path filename;
+    std::vector<std::string> warnings;
+
+    std::tuple<ReturnCode, KeyValueMapstr>
+        getSectionstr(const std::string& section);
+    std::unordered_map<Sectionstr, KeyValueMapstr> sections;
+};
+
+} // namespace config
+} // namespace network
+} // namespace phosphor
