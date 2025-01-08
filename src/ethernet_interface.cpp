@@ -1926,7 +1926,7 @@ void EthernetInterface::writeConfigurationFile()
 
     if ((it != manager.get().interfaces.end()) &&
         (interfaceName().compare(bondIfcName) != 0) &&
-        (interfaceName().compare("usb0") != 0))
+        (interfaceName().compare("hostusb0") != 0))
     {
         std::error_code ec{};
         if (fs::exists(config::pathForIntfConf(manager.get().getConfDir(),

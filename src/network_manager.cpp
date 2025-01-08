@@ -1043,7 +1043,7 @@ ObjectPath Manager::bond(std::string activeSlave, uint8_t miiMonitor)
                               Argument::ARGUMENT_VALUE(activeSlave.c_str()));
     }
     else if ((activeSlave.compare("bond0") == 0) ||
-             (activeSlave.compare("usb0") == 0))
+             (activeSlave.compare("hostusb0") == 0))
     {
         elog<InvalidArgument>(Argument::ARGUMENT_NAME("ActiveSlave"),
                               Argument::ARGUMENT_VALUE(activeSlave.c_str()));

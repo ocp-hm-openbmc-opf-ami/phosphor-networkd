@@ -68,8 +68,8 @@ TEST(IgnoredInterfaces, NotEmpty)
     auto ret = internal::parseInterfaces("eth0");
     EXPECT_THAT(ret, ContainerEq(expected));
 
-    expected = {"eth0", "eth1", "bond1", "usb0"};
-    ret = internal::parseInterfaces(" ,eth0, eth1  ,bond1, usb0,,");
+    expected = {"eth0", "eth1", "bond1", "hostusb0"};
+    ret = internal::parseInterfaces(" ,eth0, eth1  ,bond1, hostusb0,,");
     EXPECT_THAT(ret, ContainerEq(expected));
 }
 
