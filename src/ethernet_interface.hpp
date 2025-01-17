@@ -347,6 +347,8 @@ class EthernetInterface : public Ifaces
     /** Get value of Duplex */
     Duplex duplex() const override;
 
+    void migrateIPIndex(std::string dst);
+
     /** @brief Implementation for SetPHYConfiguration
      *  Set the auto negotiation, duplex and speed in the current interface
      *

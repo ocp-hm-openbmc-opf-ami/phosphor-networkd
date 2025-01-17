@@ -69,13 +69,7 @@ void Bond::delete_()
     auto ifidx = eth.getIfIdx();
     std::string ipv6StaticRtrAddr{};
     bool ipv4Enable, ipv6Enable, ipv6EnableStaticRtr;
-    std::vector<std::optional<std::string>> ipv4IndexUsedList,
-        ipv6IndexUsedList;
 
-    if (ifidx > 0)
-    {
-        eth.manager.get().interfacesByIdx.erase(ifidx);
-    }
     /**Save Information of Bond0 and later restore*/
     auto it = eth.manager.get().interfaces.find(intf);
     std::map<std::string, std::variant<bool, std::string,
@@ -86,8 +80,7 @@ void Bond::delete_()
     {
         map.emplace("ipv6StaticRtrAddr", it->second->ipv6StaticRtrAddr());
         map.emplace("ipv6EnableStaticRtr", it->second->ipv6EnableStaticRtr());
-        map.emplace("ipv4IndexUsedList", it->second->ipv4IndexUsedList);
-        map.emplace("ipv6IndexUsedList", it->second->ipv6IndexUsedList);
+        it->second->migrateIPIndex(activeSlave());
         map.emplace("ipv4Enable", it->second->ipv4Enable());
         map.emplace("ipv6Enable", it->second->ipv6Enable());
         map.emplace("autoNeg", it->second->autoNeg());
@@ -108,6 +101,7 @@ void Bond::delete_()
             "phosphor-ipmi-net@bond0.service");
     if (ifidx > 0)
     {
+        eth.manager.get().interfacesByIdx.erase(ifidx);
         // We need to forcibly delete the interface as systemd does not
         system::deleteIntf(ifidx);
         // Ignore the interface so the reload doesn't re-query it
@@ -183,12 +177,6 @@ void Bond::restoreConfiguration(
                 std::get<bool>(map["ipv4Enable"]), true);
             it->second->EthernetInterfaceIntf::ipv6Enable(
                 std::get<bool>(map["ipv6Enable"]), true);
-            it->second->ipv4IndexUsedList =
-                std::move(std::get<std::vector<std::optional<std::string>>>(
-                    map["ipv4IndexUsedList"]));
-            it->second->ipv6IndexUsedList =
-                std::move(std::get<std::vector<std::optional<std::string>>>(
-                    map["ipv6IndexUsedList"]));
             it->second->EthernetInterfaceIntf::ipv6EnableStaticRtr(
                 std::get<bool>(map["ipv6EnableStaticRtr"]), true);
             it->second->EthernetInterfaceIntf::ipv6StaticRtrAddr(

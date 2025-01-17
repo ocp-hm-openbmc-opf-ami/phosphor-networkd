@@ -1562,6 +1562,7 @@ ObjectPath EthernetInterface::createBond(std::string activeSlave,
         it->second->bonding->writeBondConfiguration(true);
     }
 
+    writeIfaceStateFile(intfName);
     execute("/bin/systemctl", "systemctl", "restart",
             "systemd-networkd.service");
 
@@ -4398,6 +4399,16 @@ std::string EthernetInterface::backupGatewayMACAddress() const
     }
 
     return mac;
+}
+
+void EthernetInterface::migrateIPIndex(std::string dst)
+{
+    auto it_dst = manager.get().interfaces.find(dst);
+    if (it_dst != manager.get().interfaces.end() )
+    {
+        it_dst->second->ipv4IndexUsedList = std::move(this->ipv4IndexUsedList);
+        it_dst->second->ipv6IndexUsedList = std::move(this->ipv6IndexUsedList);
+    }
 }
 
 } // namespace network
