@@ -2711,8 +2711,17 @@ bool EthernetInterface::ipv6Enable(bool value)
         return value;
     }
 
+    if (value)
+    {
+        EthernetInterfaceIntf::linkLocalAutoConf(LinkLocalConf::v6);
+    }
+    else
+    {
+        EthernetInterfaceIntf::linkLocalAutoConf(LinkLocalConf::none);
+    }
+
     std::system(fmt::format("/bin/echo {} > /proc/sys/net/ipv6/conf/{}/disable_ipv6",
-                            value ? 1 : 0, interfaceName()).c_str());
+                            value ? 0 : 1, interfaceName()).c_str());
 
     EthernetInterfaceIntf::ipv6Enable(value);
     writeConfigurationFile();
