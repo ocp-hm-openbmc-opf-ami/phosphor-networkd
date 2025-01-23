@@ -3382,7 +3382,7 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                     }
                     else if (t.first == "OnlineState")
                     {
-                        if ((std::get<std::string>(t.second) == "online") && (interfaceName() == "hostusb0"))
+                        if ((std::get<std::string>(t.second) == "online") && (interfaceName() != "hostusb0"))
                             manager.get().reconfigLink(ifIdx);
                     }
                 }
