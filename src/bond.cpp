@@ -277,34 +277,6 @@ void Bond::writeBondConfiguration(bool isActive)
         {
             ofs << intfName << std::endl;
         }
-        else if (!isActive && line.starts_with("[Link]"))
-        {
-            ofs << line << std::endl;
-            tmpIfs.open(config::pathForIntfConf(
-                eth.manager.get().getBondingConfBakDir(),
-                BondIntf::activeSlave()));
-            if (!tmpIfs.is_open())
-            {
-                log<level::INFO>(
-                    "writeBondConfiguration slave configuration file not opened.\n");
-            }
-            while (tmpIfs.peek() != EOF)
-            {
-                std::getline(tmpIfs, slaveMAC);
-                if (slaveMAC.starts_with("[Link]"))
-                {
-                    slaveMAC.clear();
-                    std::getline(tmpIfs, slaveMAC);
-                    break;
-                }
-                slaveMAC.clear();
-            }
-
-            if (std::getline(ifs, line) && line.starts_with("MACAddress="))
-            {
-                ofs << slaveMAC << std::endl;
-            }
-        }
         else
         {
             ofs << line << std::endl;
@@ -366,5 +338,44 @@ void Bond::writeBondConfiguration(bool isActive)
         elog<InternalFailure>();
     }
 }
+
+void Bond::updateMACAddress(std::string macStr)
+{
+    {
+        config::Parser config;
+        auto& netdev = config.map["NetDev"].emplace_back();
+        netdev["Name"].emplace_back(eth.interfaceName());
+        netdev["Kind"].emplace_back("bond");
+        netdev["MACAddress"].emplace_back(macStr);
+        netdev["MACAddressPolicy"].emplace_back("persistent");
+        auto& bond = config.map["Bond"].emplace_back();
+        bond["Mode"].emplace_back("active-backup");
+        bond["MIIMonitorSec"].emplace_back(fmt::format("{}ms", BondIntf::miiMonitor()));
+        config.writeFile(
+            config::pathForIntfDev(eth.manager.get().getConfDir(), eth.interfaceName()));
+    }
+
+    for (auto it = eth.manager.get().interfaces.begin();
+         it != eth.manager.get().interfaces.end(); it++)
+    {
+	if(it->second->interfaceName() == "bond0")
+	{
+	    it->second->addrs.clear();
+	}
+
+        if((it->second->interfaceName() != "hostusb0") && (it->second->interfaceName() != "bond0"))
+        {
+                system::setNICUp(it->second->interfaceName(), false);
+        }
+    }
+
+    system::setNICUp("bond0",false);
+
+    sleep(2);
+
+    execute("/bin/systemctl", "systemctl", "restart",
+            "systemd-networkd.service");
+}
+
 } // namespace network
 } // namespace phosphor

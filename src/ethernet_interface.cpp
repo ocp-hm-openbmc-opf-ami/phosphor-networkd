@@ -32,6 +32,7 @@
 #include <string>
 #include <unordered_map>
 #include <variant>
+#include <iostream>
 
 namespace phosphor
 {
@@ -1538,6 +1539,7 @@ ObjectPath EthernetInterface::createBond(std::string activeSlave,
     netdev["Name"].emplace_back(intfName);
     netdev["Kind"].emplace_back("bond");
     netdev["MACAddress"].emplace_back(macStr);
+    netdev["MACAddressPolicy"].emplace_back("persistent");
     auto& bond = config.map["Bond"].emplace_back();
     bond["Mode"].emplace_back("active-backup");
     bond["MIIMonitorSec"].emplace_back(fmt::format("{}ms", miiMonitor));
@@ -1925,7 +1927,10 @@ void EthernetInterface::writeConfigurationFile()
         std::error_code ec{};
         if (fs::exists(config::pathForIntfConf(manager.get().getConfDir(),
                                                interfaceName()),
-                       ec))
+                       ec)
+            && (!fs::exists(config::pathForIntfConf(manager.get().getBondingConfBakDir(),
+                                               interfaceName()),
+                       ec)) )
         {
             if (!fs::copy_file(
                     config::pathForIntfConf(manager.get().getConfDir(),
@@ -1952,17 +1957,7 @@ void EthernetInterface::writeConfigurationFile()
             interfaceName());
         {
             auto& link = config.map["Link"].emplace_back();
-#ifdef PERSIST_MAC
 
-            config::Parser parser(config::pathForIntfDev(manager.get().getConfDir(), bondIfcName));
-            auto str1 = parser.map.getLastValueString("NetDev", "MACAddress");
-
-            if (!str1->empty())
-            {
-                link["MACAddress"].emplace_back(str1->c_str());
-            }
-
-#endif
             if (!EthernetInterfaceIntf::nicEnabled())
             {
                 link["Unmanaged"].emplace_back("yes");
@@ -2228,6 +2223,9 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
     // We don't need to update the system if the address is unchanged
     auto oldMAC =
         stdplus::fromStr<stdplus::EtherAddr>(MacAddressIntf::macAddress());
+
+    std::string activeSlaveInterface="";
+    auto bondEnabled=false;
     if (newMAC != oldMAC)
     {
         // Update everything that depends on the MAC value
@@ -2237,13 +2235,46 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
             {
                 intf->MacAddressIntf::macAddress(validMAC);
             }
+            if(intf->interfaceName() == "bond0")
+            {
+                bondEnabled=true;
+                activeSlaveInterface = intf->bonding->activeSlave();
+            }
         }
-        MacAddressIntf::macAddress(validMAC);
 
-        writeConfigurationFile();
-        manager.get().addReloadPreHook([interface, manager = manager]() {
-            // The MAC and LLADDRs will only update if the NIC is already down
-            system::setNICUp(interface, false);
+        manager.get().addReloadPreHook([this, bondEnabled, validMAC, activeSlaveInterface,
+                              interface, manager = manager]() {
+            // handle bonding mac address update for slave and bond
+            if(bondEnabled)
+            {
+                std::string intf = (interface == "bond0") ? "eth0" : interface;
+                if(intf == activeSlaveInterface)
+                {
+                    for (const auto& [_, intf] : manager.get().interfaces)
+                    {
+                        if(intf->interfaceName() == "bond0")
+                        {
+                            intf->MacAddressIntf::macAddress(validMAC);
+                            intf->writeConfigurationFile();
+                            intf->bonding->updateMACAddress(validMAC);
+                            break;
+                        }
+                    }
+                }
+                else // update mac address for slave of bonding interface when it is not active slave
+                {
+		    this->updateBondConfBackupForSlaveMAC(validMAC,intf);
+                }
+            }
+            else
+            {
+                this->MacAddressIntf::macAddress(validMAC);
+                this->writeConfigurationFile();
+                // The MAC and LLADDRs will only update if the NIC is already down
+                system::setNICUp(interface, false);
+            }
+
+
             writeUpdatedTime(
                 manager,
                 config::pathForIntfConf(manager.get().getConfDir(), interface));
@@ -4418,6 +4449,69 @@ void EthernetInterface::migrateIPIndex(std::string dst)
         it_dst->second->ipv4IndexUsedList = std::move(this->ipv4IndexUsedList);
         it_dst->second->ipv6IndexUsedList = std::move(this->ipv6IndexUsedList);
     }
+}
+
+void EthernetInterface::updateBondConfBackupForSlaveMAC(std::string newMAC, std::string interface)
+{
+    std::ofstream ofs;
+    std::ifstream ifs;
+
+    ifs.open(config::pathForIntfConf(
+        manager.get().getBondingConfBakDir(), interface));
+    if (!ifs.is_open())
+    {
+        log<level::INFO>(
+            "updateBondConfBackupForSlaveMAC slave configuration file not opened.\n");
+    }
+
+
+    std::stringstream buffer;
+    buffer << ifs.rdbuf();
+    std::string fileContent = buffer.str();
+    ifs.close();
+
+    // Variables to help with parsing the sections
+    bool inLinkSection = false;
+    std::string searchString = "MACAddress=";
+    size_t pos = 0;
+
+    // Iterate through the content to modify only the MACAddress in the [Link] section
+    while ((pos = fileContent.find("[", pos)) != std::string::npos) {
+        // Check if we are entering the [Link] section
+        size_t sectionEnd = fileContent.find("]", pos);
+        if (sectionEnd != std::string::npos) {
+            std::string sectionName = fileContent.substr(pos + 1, sectionEnd - pos - 1);
+
+            // Check if it's the [Link] section
+            if (sectionName == "Link") {
+                inLinkSection = true;
+            } else {
+                inLinkSection = false;
+            }
+        }
+
+        // If we are in the [Link] section, find and replace the MAC address
+        if (inLinkSection) {
+            size_t macPos = fileContent.find(searchString, pos);
+            if (macPos != std::string::npos) {
+                size_t macEnd = fileContent.find("\n", macPos);
+                fileContent.replace(macPos + searchString.length(), macEnd - macPos - searchString.length(), newMAC);
+                break; // After replacing, exit as we only need to update the first MAC address in [Link]
+            }
+        }
+        pos++; // Move to the next section
+    }
+
+    ofs.open(
+        config::pathForIntfConf(manager.get().getBondingConfBakDir(), interface));
+    if (!ofs.is_open())
+    {
+        log<level::INFO>(
+            "updateBondConfBackupForSlaveMAC slave configuration file not opened.\n");
+    }
+
+    ofs << fileContent;
+    ofs.close();
 }
 
 } // namespace network

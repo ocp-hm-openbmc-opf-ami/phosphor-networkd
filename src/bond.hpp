@@ -76,6 +76,8 @@ class Bond : public BondObj
         return objPath;
     }
 
+    void updateMACAddress(std::string );
+
   private:
     /** @brief Parent Object. */
     EthernetInterface& eth;
