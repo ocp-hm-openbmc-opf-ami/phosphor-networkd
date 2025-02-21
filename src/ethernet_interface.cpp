@@ -285,7 +285,11 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     {
         addStaticNeigh(neigh);
     }
+#if ENABLE_BOND_SUPPORT
     if (std::string mac = getMAC(config); (!mac.empty() && !info.intf.bondInfo))
+#else
+    if (std::string mac = getMAC(config); !mac.empty())
+#endif
     {
         system::setNICUp(interfaceName(), false);
         MacAddressIntf::macAddress(mac, true);
@@ -2225,7 +2229,9 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
         stdplus::fromStr<stdplus::EtherAddr>(MacAddressIntf::macAddress());
 
     std::string activeSlaveInterface="";
+#if ENABLE_BOND_SUPPORT
     auto bondEnabled=false;
+#endif
     if (newMAC != oldMAC)
     {
         // Update everything that depends on the MAC value
@@ -2235,14 +2241,16 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
             {
                 intf->MacAddressIntf::macAddress(validMAC);
             }
+#if ENABLE_BOND_SUPPORT
             if(intf->interfaceName() == "bond0")
             {
                 bondEnabled=true;
                 activeSlaveInterface = intf->bonding->activeSlave();
             }
+#endif
         }
-
-        manager.get().addReloadPreHook([this, bondEnabled, validMAC, activeSlaveInterface,
+#if ENABLE_BOND_SUPPORT
+            manager.get().addReloadPreHook([this, bondEnabled, validMAC, activeSlaveInterface,
                               interface, manager = manager]() {
             // handle bonding mac address update for slave and bond
             if(bondEnabled)
@@ -2263,8 +2271,9 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 }
                 else // update mac address for slave of bonding interface when it is not active slave
                 {
-		    this->updateBondConfBackupForSlaveMAC(validMAC,intf);
+                    this->updateBondConfBackupForSlaveMAC(validMAC,intf);
                 }
+#endif
             }
             else
             {
@@ -4451,6 +4460,7 @@ void EthernetInterface::migrateIPIndex(std::string dst)
     }
 }
 
+#if ENABLE_BOND_SUPPORT
 void EthernetInterface::updateBondConfBackupForSlaveMAC(std::string newMAC, std::string interface)
 {
     std::ofstream ofs;
@@ -4513,6 +4523,7 @@ void EthernetInterface::updateBondConfBackupForSlaveMAC(std::string newMAC, std:
     ofs << fileContent;
     ofs.close();
 }
+#endif
 
 } // namespace network
 } // namespace phosphor
