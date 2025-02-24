@@ -2273,7 +2273,6 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 {
                     this->updateBondConfBackupForSlaveMAC(validMAC,intf);
                 }
-#endif
             }
             else
             {
@@ -2288,6 +2287,7 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 manager,
                 config::pathForIntfConf(manager.get().getConfDir(), interface));
         });
+#endif
         manager.get().reloadConfigs();
     }
 
