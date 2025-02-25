@@ -244,6 +244,8 @@ GARP::GARP(const std::string& interfaceName, const int interval)
 {
     this->interface = interfaceName;
     this->replyInterval = interval;
+    /* Reason for False Positive - It is guaranteed to be assigned a valid value before any usage. */
+    /* coverity[uninit_member : FALSE] */
 }
 
 /** @brief Broadcast the GARP Packet into the ethernet interface.

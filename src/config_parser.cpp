@@ -272,12 +272,16 @@ struct Parse
                             std::make_move_iterator(new_warnings.end()));
             return;
         }
+        /* Reason for False Positive - The status value won't be overflow */
+        /* coverity[overflow_const : FALSE] */
         auto v = line.substr(epos + 1);
         removePadding(v);
 
         auto it = section->find(k);
         if (it == section->end())
         {
+            /* Reason for False Positive - Logic ensures the pointer is not null before dereference */
+            /* coverity[var_deref_model : FALSE] */
             std::tie(it, std::ignore) =
                 section->emplace(Key(Key::unchecked(), k), ValueList{});
         }

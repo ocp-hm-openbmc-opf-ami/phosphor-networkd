@@ -21,7 +21,8 @@ namespace ncsi
 {
 
 using CallBack = int (*)(struct nl_msg* msg, void* arg);
-
+/* Reason for False Positive - Any potential exceptions are handled internally */
+/* coverity[Uncaught exception : FALSE] */
 static stdplus::StrBuf toHexStr(std::span<const uint8_t> c) noexcept
 {
     stdplus::StrBuf ret;

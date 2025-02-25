@@ -460,6 +460,10 @@ class EthernetInterface : public Ifaces
     /** Get Metric value of Default Gateway */
     uint16_t getMetricValueDefaultGateway(std::string value);
 
+#if ENABLE_BOND_SUPPORT
+    void updateBondConfBackupForSlaveMAC(std::string, std::string);
+#endif
+
     using EthernetInterfaceIntf::interfaceName;
     using EthernetInterfaceIntf::linkUp;
     using EthernetInterfaceIntf::mtu;
