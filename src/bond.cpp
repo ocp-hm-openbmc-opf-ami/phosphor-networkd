@@ -222,6 +222,20 @@ void Bond::restoreConfiguration(
         }
         std::filesystem::remove(dirent.path(), ec);
     }
+
+    for (auto it = eth.manager.get().interfaces.begin();
+         it != eth.manager.get().interfaces.end(); it++)
+    {
+        if((it->second->interfaceName() != "hostusb0") && (it->second->interfaceName() != "bond0"))
+        {
+            config::Parser config(
+                config::pathForIntfConf(eth.manager.get().getConfDir(), it->second->interfaceName()));
+            std::string mac = getMAC(config);
+
+            system::setNICUp(it->second->interfaceName(), false);
+            it->second->MacAddressIntf::macAddress(mac, true);
+        }
+    }
 }
 
 void Bond::writeBondConfiguration(bool isActive)
