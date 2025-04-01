@@ -120,6 +120,7 @@ CallBack infoCallBack = [](struct nl_msg* msg, void* arg) {
     }
 
     auto rem = nla_len(tb[NCSI_ATTR_PACKAGE_LIST]);
+    linkStatus = 0;
     nla_for_each_nested(attrTgt, tb[NCSI_ATTR_PACKAGE_LIST], rem)
     {
         pakckageChannel.clear();
@@ -215,6 +216,7 @@ CallBack infoCallBack = [](struct nl_msg* msg, void* arg) {
                     nla_get_u32(channeltb[NCSI_CHANNEL_ATTR_LINK_STATE]);
                 lg2::debug("Channel Link State : {LINK_STATE}", "LINK_STATE",
                            lg2::hex, link);
+                linkStatus |= link;
             }
             if (channeltb[NCSI_CHANNEL_ATTR_FC])
             {
@@ -515,6 +517,20 @@ bool deviceAvailable(int ifindex)
 {
     int ret = getInfo(ifindex, -1);
     return (ret < 0) ? false : true;
+}
+
+bool getLinkStatus(int ifindex)
+{
+    int ret = getInfo(ifindex, -1);
+    if (ret < 0)
+    {
+        lg2::debug(
+            "getLinkStatus. Unable to get the information fo NCSI interface.");
+        return false;
+    }
+
+    return (linkStatus & 0x01) == 1 ? true:false ;
+
 }
 } // namespace ncsi
 } // namespace network

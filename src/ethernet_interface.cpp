@@ -211,7 +211,7 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     EthernetInterfaceIntf::ncsi(false, true);
 
 #ifdef AMI_NCSI_SUPPORT
-    if (std::string{DEFAULT_NCSI_INTERFACE} == interfaceName())
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
     {
         auto [mode, package, channel] = getNCSIValue(ifaceConfig);
         ncsiConfig.emplace(bus, this->objPath.c_str(), *this,
@@ -306,6 +306,13 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
 {
     ifIdx = info.idx;
     EthernetInterfaceIntf::linkUp(info.flags & IFF_RUNNING, skipSignal);
+#ifdef AMI_NCSI_SUPPORT
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
+    {
+        auto v = phosphor::network::ncsi::getLinkStatus(ifIdx);
+        EthernetInterfaceIntf::linkUp(phosphor::network::ncsi::getLinkStatus(ifIdx), skipSignal);
+    }
+#endif
     config::Parser config(
         config::pathForIntfConf(manager.get().getConfDir(), interfaceName()));
     if (std::string mac = getMAC(config);
@@ -1716,7 +1723,7 @@ void EthernetInterface::writeIfaceStateFile(std::string ifname)
 #ifdef AMI_NCSI_SUPPORT
     {
         {
-            if (std::string{DEFAULT_NCSI_INTERFACE} == interfaceName() &&
+            if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos &&
                 EthernetInterface::ncsiConfig.has_value())
             {
                 auto& ncsi = IfaceState.map["NCSI"].emplace_back();
@@ -3444,10 +3451,19 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                             }
                         }
                     }
-                    else if (t.first == "OnlineState")
+                    else if (t.first == "OnlineState" && manager.get().initCompleted)
                     {
                         if ((std::get<std::string>(t.second) == "online") && (interfaceName() != "hostusb0"))
+                        {
                             manager.get().reconfigLink(ifIdx);
+#ifdef AMI_NCSI_SUPPORT
+                            if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
+                            {
+                                auto v = phosphor::network::ncsi::getLinkStatus(ifIdx);
+                                EthernetInterfaceIntf::linkUp(phosphor::network::ncsi::getLinkStatus(ifIdx), true);
+                            }
+#endif
+                        }
                     }
                 }
             });

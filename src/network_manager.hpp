@@ -199,6 +199,8 @@ class Manager : public ManagerIface
      */
     std::vector<std::string> getGatewayFromFile();
 
+    bool initCompleted;
+
 #ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
     /** @brief Used to notify/wait to exexute advanced-route */
     std::condition_variable advanced_route_cond_var;
@@ -272,7 +274,6 @@ class Manager : public ManagerIface
     void registerSignal(sdbusplus::bus::bus& bus);
 
   private:
-    bool initCompleted;
 #ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
     std::thread advanced_route_worker;
     void AdvancedRoute();
