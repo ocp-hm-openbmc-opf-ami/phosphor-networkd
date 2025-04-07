@@ -2753,20 +2753,25 @@ bool EthernetInterface::ipv6Enable(bool value)
 
     if (value)
     {
-        EthernetInterfaceIntf::linkLocalAutoConf(LinkLocalConf::v6);
+        std::system(fmt::format("ip link set dev {} down", interfaceName()).c_str());
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::system(fmt::format("ip link set dev {} up", interfaceName()).c_str());
+        EthernetInterfaceIntf::ipv6Enable(value);
+        dhcp6(value);
     }
     else
     {
-        EthernetInterfaceIntf::linkLocalAutoConf(LinkLocalConf::none);
+        manager.get().addReloadPostHook([&]() {
+            std::this_thread::sleep_for(std::chrono::seconds(10));
+            lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME", interfaceName());
+            std::system(fmt::format("ip -6 addr flush dev {}", interfaceName()).c_str());
+        });
+        dhcp6(value);
+        EthernetInterfaceIntf::ipv6Enable(value);
     }
 
-    std::system(fmt::format("/bin/echo {} > /proc/sys/net/ipv6/conf/{}/disable_ipv6",
-                            value ? 0 : 1, interfaceName()).c_str());
 
-    EthernetInterfaceIntf::ipv6Enable(value);
     writeConfigurationFile();
-    manager.get().reloadConfigs();
-
     return value;
 }
 

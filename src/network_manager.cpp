@@ -858,6 +858,16 @@ void Manager::registerSignal(sdbusplus::bus::bus& bus)
                                     }
                                 }
                             }
+                            {
+                                for (auto it = interfaces.begin(); it != interfaces.end(); it++)
+                                {
+                                    if (!it->second->EthernetInterfaceIntf::ipv6Enable())
+                                    {
+                                        lg2::info("Flush Ipv6 address on dev {NAME}\n", "NAME", it->first);
+                                        std::system(fmt::format("ip -6 addr flush dev {}", it->first).c_str());
+                                    }
+                                }
+                            }
                             initCompleted = true;
                         }
                     }
