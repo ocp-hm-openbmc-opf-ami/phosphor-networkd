@@ -116,7 +116,7 @@ void Bond::delete_()
     for (auto it = eth.manager.get().interfaces.begin();
          it != eth.manager.get().interfaces.end(); it++)
     {
-        if (it->second->interfaceName() != "usb0")
+        if (it->second->interfaceName() != "hostusb0")
         {
             execute("/bin/systemctl", "systemctl", "restart",
                     fmt::format("phosphor-ipmi-net@{}.service",
@@ -137,7 +137,7 @@ std::string Bond::activeSlave(std::string activeSlave)
                               Argument::ARGUMENT_VALUE(activeSlave.c_str()));
     }
     else if ((activeSlave.compare("bond0") == 0) ||
-             (activeSlave.compare("usb0") == 0))
+             (activeSlave.compare("hostusb0") == 0))
     {
         elog<InvalidArgument>(Argument::ARGUMENT_NAME("ActiveSlave"),
                               Argument::ARGUMENT_VALUE(activeSlave.c_str()));

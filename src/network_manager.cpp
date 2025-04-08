@@ -858,6 +858,16 @@ void Manager::registerSignal(sdbusplus::bus::bus& bus)
                                     }
                                 }
                             }
+                            {
+                                for (auto it = interfaces.begin(); it != interfaces.end(); it++)
+                                {
+                                    if (!it->second->EthernetInterfaceIntf::ipv6Enable())
+                                    {
+                                        lg2::info("Flush Ipv6 address on dev {NAME}\n", "NAME", it->first);
+                                        std::system(fmt::format("ip -6 addr flush dev {}", it->first).c_str());
+                                    }
+                                }
+                            }
                             initCompleted = true;
                         }
                     }
@@ -1033,7 +1043,7 @@ ObjectPath Manager::bond(std::string activeSlave, uint8_t miiMonitor)
                               Argument::ARGUMENT_VALUE(activeSlave.c_str()));
     }
     else if ((activeSlave.compare("bond0") == 0) ||
-             (activeSlave.compare("usb0") == 0))
+             (activeSlave.compare("hostusb0") == 0))
     {
         elog<InvalidArgument>(Argument::ARGUMENT_NAME("ActiveSlave"),
                               Argument::ARGUMENT_VALUE(activeSlave.c_str()));
