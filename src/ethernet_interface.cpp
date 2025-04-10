@@ -1021,6 +1021,15 @@ bool EthernetInterface::dhcp4(bool value)
     {
         if (value)
         {
+            for (const auto& addr : addrs)
+            {
+                if (addr.second->type() == IP::Protocol::IPv4)
+                {
+                    addr.second->delete_();
+                    break;
+                }
+            }
+
             if (!EthernetInterfaceIntf::defaultGateway().empty())
             {
                 manager.get().removeNeighbor(
@@ -1075,6 +1084,22 @@ bool EthernetInterface::dhcp6(bool value)
             ipv6IndexUsedList.clear();
             ipv6IndexUsedList.assign(IPV6_MAX_NUM + 1, std::nullopt);
         } // if
+
+        auto size = addrs.size();
+        for (int i = 0; i < size; i++)
+        {
+            auto it = addrs.begin();
+            if (it != addrs.end())
+            {
+                if (it->second->type() == IP::Protocol::IPv6 &&  it->second->origin() != IP::AddressOrigin::LinkLocal)
+                {
+                    it->second->delete_();
+                }
+            }
+            else
+                break;
+        }
+
         writeConfigurationFile();
         manager.get().reloadConfigs();
     }
