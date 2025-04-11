@@ -1027,7 +1027,17 @@ bool EthernetInterface::dhcp4(bool value)
             ipv4IndexUsedList.assign(IPV4_MAX_NUM + 1, std::nullopt);
             EthernetInterfaceIntf::backupGateway({});
         }
-
+        else
+        {
+            for (const auto& addr : addrs)
+            {
+                if (addr.second->type() == IP::Protocol::IPv4)
+                {
+                    addr.second->delete_();
+                    break;
+                }
+            }
+        }
         EthernetInterfaceIntf::dhcp4(value);
         writeConfigurationFile();
         writeIfaceStateFile(interfaceName());
