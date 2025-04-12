@@ -52,6 +52,7 @@ constexpr auto DEFAULT_VALUE = -1;
 constexpr auto NONE = 0;
 
 static std::vector<std::tuple<uint16_t, std::vector<uint16_t>>> pakckageChannel;
+static unsigned int linkStatus;
 
 int sendCommand(int ifindex, int package, int channel, int cmd,
                 std::span<const unsigned char> payload);
@@ -106,6 +107,8 @@ int getChannelList(
     std::vector<std::tuple<uint16_t, std::vector<uint16_t>>>& channelList);
 
 bool deviceAvailable(int ifindex);
+
+bool getLinkStatus(int ifindex);
 } // namespace ncsi
 } // namespace network
 } // namespace phosphor

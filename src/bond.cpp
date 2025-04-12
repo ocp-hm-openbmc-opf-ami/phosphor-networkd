@@ -16,6 +16,8 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include "util.hpp"
+
 
 namespace phosphor
 {
@@ -169,6 +171,7 @@ void Bond::restoreConfiguration(
                                        uint8_t, uint32_t>>
         map)
 {
+    std::string ifname;
     if (auto it = eth.manager.get().interfaces.find(activeSlave());
         it != eth.manager.get().interfaces.end())
     {
@@ -206,11 +209,20 @@ void Bond::restoreConfiguration(
     }
 
     writeBondConfiguration(false);
+    std::ifstream tmpIfs("/sys/class/net/bond0/bonding/primary", std::ifstream::in);
+    if (!tmpIfs.is_open())
+    {
+        log<level::INFO>(
+            "restoreConfiguration primary slave file not opened.\n");
+    }
+
+    std::getline(tmpIfs, ifname);
+    tmpIfs.close();
     for (const auto& dirent : std::filesystem::directory_iterator(
              eth.manager.get().getBondingConfBakDir()))
     {
         std::error_code ec;
-        if (dirent.path().filename().generic_string().find(activeSlave()) ==
+        if (dirent.path().filename().generic_string().find(ifname) ==
             std::string::npos)
         {
             std::filesystem::copy_file(
@@ -242,7 +254,7 @@ void Bond::writeBondConfiguration(bool isActive)
 {
     std::ofstream ofs;
     std::ifstream ifs, tmpIfs;
-    std::string intfName, line, IfaceConfDir, slaveMAC;
+    std::string intfName, line, IfaceConfDir, slaveMAC, tmp;
     if (isActive)
     {
         ifs.open(config::pathForIntfConf(
@@ -273,15 +285,23 @@ void Bond::writeBondConfiguration(bool isActive)
                 "writeBondConfiguration slave configuration file not opened.\n");
         }
 
-        ofs.open(config::pathForIntfConf(eth.manager.get().getConfDir(),
-                                         BondIntf::activeSlave()));
+        tmpIfs.open("/sys/class/net/bond0/bonding/primary", std::ifstream::in);
+        if (!tmpIfs.is_open())
+        {
+            log<level::INFO>(
+                "writeBondConfiguration primary slave file file not opened.\n");
+        }
+
+        std::getline(tmpIfs, tmp);
+        tmpIfs.close();
+        ofs.open(config::pathForIntfConf(eth.manager.get().getConfDir(), tmp));
         if (!ofs.is_open())
         {
             log<level::INFO>(
                 "writeBondConfiguration bond configuration file not opened.\n");
         }
 
-        intfName = fmt::format("Name={}", BondIntf::activeSlave());
+        intfName = fmt::format("Name={}", tmp);
     } // else
 
     while (ifs.peek() != EOF)
