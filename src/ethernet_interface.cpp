@@ -45,6 +45,7 @@ using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using NotAllowed = sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed;
 using NotAllowedArgument = xyz::openbmc_project::Common::NotAllowed;
 using Argument = xyz::openbmc_project::Common::InvalidArgument;
+using Unsupported = xyz::openbmc_project::Common::UnsupportedRequest;
 using std::literals::string_view_literals::operator""sv;
 constexpr auto RESOLVED_SERVICE = "org.freedesktop.resolve1";
 constexpr auto RESOLVD_OBJ_PATH = "/org/freedesktop/resolve1";
@@ -2969,6 +2970,7 @@ int EthernetInterface::getCreatedVLANNum(fs::path confFile)
 int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
                                                uint32_t speed)
 {
+#ifdef PHY_CONFIGURATION_SUPPORT
     if (this->vlan.has_value())
     {
         log<level::ERR>(
@@ -3014,6 +3016,11 @@ int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
     EthernetInterfaceIntf::duplex(duplex);
     writeConfigurationFile();
     return 0;
+#else
+    log<level::ERR>("PHY Configuration feature is not enabled..\n");
+    elog<UnsupportedRequest>(
+        Unsupported::REASON("PHY Configuration feature is not enabled..\n"));
+#endif    
 }
 
 uint32_t EthernetInterface::speed() const

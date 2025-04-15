@@ -29,6 +29,7 @@ conf_data.set('AMI_NCSI_SUPPORT', get_option('enable-ncsi'))
 conf_data.set_quoted('DEFAULT_NCSI_INTERFACE', get_option('default-ncsi-interface'))
 conf_data.set10('SYSTEM_FIREWALL_SUPPORT', get_option('enable-system-firewall'))
 conf_data.set10('ENABLE_BOND_SUPPORT', get_option('enable-bond-feature'))
+conf_data.set('PHY_CONFIGURATION_SUPPORT', get_option('enable-phy-configuration'))
 conf_data.set('NSUPDATE_SUPPORT', get_option('enable-nsupdate-feature'))
 conf_data.set('TSIG_SUPPORT', get_option('enable-tsig-feature'))
 
