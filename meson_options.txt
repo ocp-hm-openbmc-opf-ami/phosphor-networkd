@@ -20,4 +20,7 @@ option('ncsi-flow-control', type: 'boolean', description: 'Enable NCSI flow cont
 option('enable-ncsi', type: 'boolean', description: 'Enable NCSI Feature or not')
 option('default-ncsi-interface', type: 'string', description: 'Default NCSI interface')
 option('enable-system-firewall', type: 'boolean', description: 'Enable system firewall rules or not')
+option('enable-phy-configuration', type: 'boolean', description: 'Enable phy configuration feature or not')
 option('enable-bond-feature', type: 'boolean', description: 'Enable bond feature or not')
+option('enable-nsupdate-feature', type: 'boolean', description: 'Enable nsupdate feature or not')
+option('enable-tsig-feature', type: 'boolean', description: 'Enable TSIG feature or not')

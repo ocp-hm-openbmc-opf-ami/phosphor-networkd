@@ -45,6 +45,7 @@ using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using NotAllowed = sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed;
 using NotAllowedArgument = xyz::openbmc_project::Common::NotAllowed;
 using Argument = xyz::openbmc_project::Common::InvalidArgument;
+using Unsupported = xyz::openbmc_project::Common::UnsupportedRequest;
 using std::literals::string_view_literals::operator""sv;
 constexpr auto RESOLVED_SERVICE = "org.freedesktop.resolve1";
 constexpr auto RESOLVD_OBJ_PATH = "/org/freedesktop/resolve1";
@@ -298,8 +299,10 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
 
     signals = initSignals();
     registerSignal(bus);
+#ifdef NSUPDATE_SUPPORT
     manager.get().getDNSConf().addInterfaceConf(interfaceName());
-
+#endif
+    
 }
 
 void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
@@ -1021,6 +1024,15 @@ bool EthernetInterface::dhcp4(bool value)
     {
         if (value)
         {
+            for (const auto& addr : addrs)
+            {
+                if (addr.second->type() == IP::Protocol::IPv4)
+                {
+                    addr.second->delete_();
+                    break;
+                }
+            }
+
             if (!EthernetInterfaceIntf::defaultGateway().empty())
             {
                 manager.get().removeNeighbor(
@@ -1075,6 +1087,22 @@ bool EthernetInterface::dhcp6(bool value)
             ipv6IndexUsedList.clear();
             ipv6IndexUsedList.assign(IPV6_MAX_NUM + 1, std::nullopt);
         } // if
+
+        auto size = addrs.size();
+        for (int i = 0; i < size; i++)
+        {
+            auto it = addrs.begin();
+            if (it != addrs.end())
+            {
+                if (it->second->type() == IP::Protocol::IPv6 &&  it->second->origin() != IP::AddressOrigin::LinkLocal)
+                {
+                    it->second->delete_();
+                }
+            }
+            else
+                break;
+        }
+
         writeConfigurationFile();
         manager.get().reloadConfigs();
     }
@@ -2942,6 +2970,7 @@ int EthernetInterface::getCreatedVLANNum(fs::path confFile)
 int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
                                                uint32_t speed)
 {
+#ifdef PHY_CONFIGURATION_SUPPORT
     if (this->vlan.has_value())
     {
         log<level::ERR>(
@@ -2987,6 +3016,11 @@ int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
     EthernetInterfaceIntf::duplex(duplex);
     writeConfigurationFile();
     return 0;
+#else
+    log<level::ERR>("PHY Configuration feature is not enabled..\n");
+    elog<UnsupportedRequest>(
+        Unsupported::REASON("PHY Configuration feature is not enabled..\n"));
+#endif    
 }
 
 uint32_t EthernetInterface::speed() const

@@ -66,6 +66,7 @@ void updateDNSEntries(const fs::path& inFile, const fs::path& outFile)
 using namespace phosphor::network;
 using namespace phosphor::logging;
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
+using Unsupported = xyz::openbmc_project::Common::UnsupportedRequest;
 
 constexpr auto NSUPDATE_TMP_FILE = "/etc/dns.d/nsupdate_tmp";
 constexpr auto RESOLVED_SERVICE = "org.freedesktop.resolve1";
@@ -687,7 +688,15 @@ int16_t Configuration::setInterfacesConf(
     for (auto it = interfaceConf.begin(); it != interfaceConf.end(); it++)
     {
         auto [interface, doNsupdate, tsig, method] = (*it);
-
+#ifndef TSIG_SUPPORT
+            if(tsig == true)
+            {
+	      log<level::ERR>(
+                  "TSIG support is not enabled..\n");
+              elog<UnsupportedRequest>(
+                  Unsupported::REASON("TSIG support is not enabled..\n"));
+            }
+#endif
         if (manager.get().interfaces.find(interface) ==
             manager.get().interfaces.end())
         {
@@ -1115,8 +1124,15 @@ void Configuration::writeConfigurationFile()
                                           : "De-Register");
             ifConf["DoNsupdate"].emplace_back(doNsupdate == true ? "true"
                                                                  : "false");
+#ifndef TSIG_SUPPORT
+            ifConf["UseTSIG"].emplace_back("false");
+            if(tsig == true )
+            {
+                lg2::error("TSIG support is not enabled...\n");
+            }
+#else
             ifConf["UseTSIG"].emplace_back(tsig == true ? "true" : "false");
-
+#endif                                 
             if (auto names = getDomainName(interface); (int)names.size() > 0)
             {
                 for (auto& name : names)
