@@ -153,10 +153,12 @@ class Manager : public ManagerIface
         return *firewallConf;
     }
 
+#ifdef NSUPDATE_SUPPORT
     inline auto& getDNSConf()
     {
         return *ddnsConf;
     }
+#endif
 
     /** @brief Arms a timer to tell systemd-network to reload all of the network
      * configurations
@@ -228,9 +230,10 @@ class Manager : public ManagerIface
     /** @brief pointer to firewall conf object. */
     std::unique_ptr<firewall::Configuration> firewallConf = nullptr;
 
+#ifdef NSUPDATE_SUPPORT
     /** @brief pointer to ddns conf object. */
     std::unique_ptr<dns::Configuration> ddnsConf = nullptr;
-
+#endif
     /** @brief Network Configuration directory. */
     std::filesystem::path confDir;
 

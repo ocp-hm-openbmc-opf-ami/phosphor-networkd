@@ -178,8 +178,10 @@ Manager::Manager(stdplus::PinnedRef<sdbusplus::bus_t> bus,
         bus, (this->objPath / "config").str, *this);
     firewallConf = std::make_unique<phosphor::network::firewall::Configuration>(
         bus, (this->objPath / "firewall").str, *this);
+#ifdef NSUPDATE_SUPPORT
     ddnsConf = std::make_unique<phosphor::network::dns::Configuration>(
         bus, (this->objPath / "dns").str, *this);
+#endif
     setConfDir(confDir);
 
     initCompleted = false;

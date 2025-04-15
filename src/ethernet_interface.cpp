@@ -298,8 +298,10 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
 
     signals = initSignals();
     registerSignal(bus);
+#ifdef NSUPDATE_SUPPORT
     manager.get().getDNSConf().addInterfaceConf(interfaceName());
-
+#endif
+    
 }
 
 void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
