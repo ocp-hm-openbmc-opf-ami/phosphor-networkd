@@ -211,7 +211,7 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
 
     EthernetInterfaceIntf::ncsi(false, true);
 
-#ifdef AMI_NCSI_SUPPORT
+#if AMI_NCSI_SUPPORT
     if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
     {
         auto [mode, package, channel] = getNCSIValue(ifaceConfig);
@@ -1748,7 +1748,7 @@ void EthernetInterface::writeIfaceStateFile(std::string ifname)
             link["Speed"].emplace_back(std::to_string(it->second->speed()));
         }
     }
-#ifdef AMI_NCSI_SUPPORT
+#if AMI_NCSI_SUPPORT
     {
         {
             if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos &&
