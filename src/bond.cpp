@@ -363,7 +363,16 @@ void Bond::writeBondConfiguration(bool isActive)
     };
 
     nlohmann::ordered_json config = readJsonFile(IPMI_CHANNEL_CONFIG);
-    config["3"]["name"] = isActive ? "bond0" : "eth0";
+
+    for (const auto& element : config.items())
+    {
+        auto name = element.value()["name"].get<std::string>();
+        if ((isActive ? name == "eth0" : name == "bond0"))
+        {
+            config[element.key()]["name"] = isActive ? "bond0" : "eth0";
+            break;
+        }
+    }
 
     if (writeJsonFile(IPMI_CHANNEL_CONFIG, config) != 0)
     {
