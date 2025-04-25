@@ -93,6 +93,7 @@ int16_t Configuration::addRule(
             customIPv6rules++;
     }
 
+<<<<<<< HEAD
     if (!startIPAddress.empty())
     {
         if (startIPAddress.find(".") != std::string::npos &&
@@ -107,6 +108,15 @@ int16_t Configuration::addRule(
         } // else if
     }
     else if (customIPv4rules >= MAX_RULE_NUM || customIPv6rules >= MAX_RULE_NUM)
+=======
+    if (startIPAddress.find(".") != std::string::npos &&
+        customIPv4rules >= MAX_RULE_NUM)
+    {
+        return -1;
+    } // if
+    else if (startIPAddress.find(":") != std::string::npos &&
+             customIPv6rules >= MAX_RULE_NUM)
+>>>>>>> fix iptables
     {
         return -1;
     }
