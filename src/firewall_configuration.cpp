@@ -12,6 +12,7 @@
 #include <fmt/compile.h>
 #include <fmt/format.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -19,7 +20,6 @@
 
 #include <cstdlib>
 #include <fstream>
-#include <unistd.h>
 #include <iostream>
 
 namespace phosphor
@@ -63,12 +63,11 @@ Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
 /** @brief Implementation for AddRule
  *  Add the rule with incoming parameters
  */
-int16_t Configuration::addRule(FirewallIface::Target target, uint8_t control,
-                               FirewallIface::Protocol protocol,
-                               std::string startIPAddress,
-                               std::string endIPAddress, uint16_t startPort,
-                               uint16_t endPort, std::string macAddress,
-                               std::string startTime, std::string stopTime)
+int16_t Configuration::addRule(
+    FirewallIface::Target target, uint8_t control,
+    FirewallIface::Protocol protocol, std::string startIPAddress,
+    std::string endIPAddress, uint16_t startPort, uint16_t endPort,
+    std::string macAddress, std::string startTime, std::string stopTime)
 {
     int16_t ret = 0;
     auto customIPv4rules = 0, customIPv6rules = 0;
@@ -82,25 +81,34 @@ int16_t Configuration::addRule(FirewallIface::Target target, uint8_t control,
         return -1;
     } // if
 
-    for(const auto& elementTuple : getRules(FirewallIface::IP::IPV4))
+    for (const auto& elementTuple : getRules(FirewallIface::IP::IPV4))
     {
-        if(!std::get<0>(elementTuple)) customIPv4rules++;
+        if (!std::get<0>(elementTuple))
+            customIPv4rules++;
     }
-    for(const auto& elementTuple : getRules(FirewallIface::IP::IPV6))
+    for (const auto& elementTuple : getRules(FirewallIface::IP::IPV6))
     {
-        if(!std::get<0>(elementTuple)) customIPv6rules++;
+        if (!std::get<0>(elementTuple))
+            customIPv6rules++;
     }
 
-    if (startIPAddress.find(".") != std::string::npos &&
-         customIPv4rules >= MAX_RULE_NUM)
+    if (!startIPAddress.empty())
+    {
+        if (startIPAddress.find(".") != std::string::npos &&
+            customIPv4rules >= MAX_RULE_NUM)
+        {
+            return -1;
+        } // if
+        else if (startIPAddress.find(":") != std::string::npos &&
+                 customIPv6rules >= MAX_RULE_NUM)
+        {
+            return -1;
+        } // else if
+    }
+    else if (customIPv4rules >= MAX_RULE_NUM || customIPv6rules >= MAX_RULE_NUM)
     {
         return -1;
-    } // if
-    else if (startIPAddress.find(":") != std::string::npos &&
-         customIPv6rules >= MAX_RULE_NUM)
-    {
-        return -1;
-    } // else if
+    }
 
     if (!endIPAddress.empty() &&
         !((startIPAddress.find(":") == std::string::npos &&
@@ -272,12 +280,11 @@ int16_t Configuration::addRule(FirewallIface::Target target, uint8_t control,
 /** @brief Implementation for DelRule
  *  Delete the rule with incoming parameters
  */
-int16_t Configuration::delRule(FirewallIface::Target target, uint8_t control,
-                               FirewallIface::Protocol protocol,
-                               std::string startIPAddress,
-                               std::string endIPAddress, uint16_t startPort,
-                               uint16_t endPort, std::string macAddress,
-                               std::string startTime, std::string stopTime)
+int16_t Configuration::delRule(
+    FirewallIface::Target target, uint8_t control,
+    FirewallIface::Protocol protocol, std::string startIPAddress,
+    std::string endIPAddress, uint16_t startPort, uint16_t endPort,
+    std::string macAddress, std::string startTime, std::string stopTime)
 {
     int16_t ret;
     if (control == (uint8_t)ControlBit::TIMEOUT ||
@@ -618,15 +625,18 @@ void Configuration::writeConfigurationFile(bool isInit)
     {
         if (isInit)
         {
-            command = "ip6tables-save | grep -E '^(:|#|\\*|.*COMMIT.*|.*Preload.*)'";
-            logFilePathStr = std::string(AMI_IPTABLES_DIR) + "/" + std::string(IP6TABLES_RULES);
+            command =
+                "ip6tables-save | grep -E '^(:|#|\\*|.*COMMIT.*|.*Preload.*)'";
+            logFilePathStr = std::string(AMI_IPTABLES_DIR) + "/" +
+                             std::string(IP6TABLES_RULES);
             logFilePath = logFilePathStr.c_str();
             executeCommandAndLog(command, logFilePath);
         }
         else
         {
             command = "ip6tables-save | grep -v Preload";
-            logFilePathStr = std::string(CUSTOM_IPTABLES_DIR) + "/" + std::string(IP6TABLES_RULES);
+            logFilePathStr = std::string(CUSTOM_IPTABLES_DIR) + "/" +
+                             std::string(IP6TABLES_RULES);
             logFilePath = logFilePathStr.c_str();
             executeCommandAndLog(command, logFilePath);
         }
@@ -635,15 +645,18 @@ void Configuration::writeConfigurationFile(bool isInit)
     {
         if (isInit)
         {
-            command = "iptables-save | grep -E '^(:|#|\\*|.*COMMIT.*|.*Preload.*)'";
-            logFilePathStr = std::string(AMI_IPTABLES_DIR) + "/" + std::string(IPTABLES_RULES);
+            command =
+                "iptables-save | grep -E '^(:|#|\\*|.*COMMIT.*|.*Preload.*)'";
+            logFilePathStr = std::string(AMI_IPTABLES_DIR) + "/" +
+                             std::string(IPTABLES_RULES);
             logFilePath = logFilePathStr.c_str();
             executeCommandAndLog(command, logFilePath);
         }
         else
         {
             command = "iptables-save | grep -v Preload";
-            logFilePathStr = std::string(CUSTOM_IPTABLES_DIR) + "/" + std::string(IPTABLES_RULES);
+            logFilePathStr = std::string(CUSTOM_IPTABLES_DIR) + "/" +
+                             std::string(IPTABLES_RULES);
             logFilePath = logFilePathStr.c_str();
             executeCommandAndLog(command, logFilePath);
         }
@@ -658,14 +671,22 @@ void Configuration::restoreConfigurationFile()
         if (fs::exists(
                 fmt::format("{}/{}", CUSTOM_IPTABLES_DIR, IP6TABLES_RULES)
                     .c_str()))
-            (void)runSystemCommand("ip6tables-restore", fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR, IP6TABLES_RULES).c_str());
+            (void)runSystemCommand(
+                "ip6tables-restore",
+                fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR,
+                            IP6TABLES_RULES)
+                    .c_str());
     } // if
     else
     {
         if (fs::exists(
                 fmt::format("{}/{}", CUSTOM_IPTABLES_DIR, IP6TABLES_RULES)
                     .c_str()))
-            (void)runSystemCommand("iptables-restore", fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR, IPTABLES_RULES).c_str());
+            (void)runSystemCommand(
+                "iptables-restore",
+                fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR,
+                            IPTABLES_RULES)
+                    .c_str());
     } // else
 }
 
@@ -676,20 +697,32 @@ void Configuration::appendPreloadRules()
     if (typeid(T) == typeid(in_addr))
     {
         // Add IPv4 Preload Rules here
-        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 8 -j DROP -m comment --comment \"Preload\"");
+        (void)runSystemCommand(
+            "iptables",
+            "-A INPUT -p icmp --icmp-type 8 -j DROP -m comment --comment \"Preload\"");
 
-        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 13 -j DROP -m comment --comment \"Preload\"");
+        (void)runSystemCommand(
+            "iptables",
+            "-A INPUT -p icmp --icmp-type 13 -j DROP -m comment --comment \"Preload\"");
 
-        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 14 -j DROP -m comment --comment \"Preload\"");
+        (void)runSystemCommand(
+            "iptables",
+            "-A INPUT -p icmp --icmp-type 14 -j DROP -m comment --comment \"Preload\"");
 
-        (void)runSystemCommand("iptables", "-A INPUT -p icmp --icmp-type 11 -j DROP -m comment --comment \"Preload\"");
+        (void)runSystemCommand(
+            "iptables",
+            "-A INPUT -p icmp --icmp-type 11 -j DROP -m comment --comment \"Preload\"");
 
-        (void)runSystemCommand("iptables", "-A OUTPUT -p icmp --icmp-type 11 -j DROP -m comment --comment \"Preload\"");
+        (void)runSystemCommand(
+            "iptables",
+            "-A OUTPUT -p icmp --icmp-type 11 -j DROP -m comment --comment \"Preload\"");
     } // if
     else
     {
         // Add IPv6 Preload Rules here
-        (void)runSystemCommand("ip6tables", "-A INPUT -p icmpv6 --icmpv6-type 128 -j DROP -m comment --comment \"Preload\"");
+        (void)runSystemCommand(
+            "ip6tables",
+            "-A INPUT -p icmpv6 --icmpv6-type 128 -j DROP -m comment --comment \"Preload\"");
     } // else
 #endif
 }
