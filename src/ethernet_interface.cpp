@@ -27,12 +27,12 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <regex>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <variant>
-#include <iostream>
 
 namespace phosphor
 {
@@ -93,9 +93,9 @@ const float DHCPv6_Timing_Param[2 * MAX_SUPPORTED_DHCPv6_TIMING_PARAMS] = {
 const std::string bondIfcName = "bond0";
 #endif
 template <typename Func>
-inline decltype(std::declval<Func>()())
-    ignoreError(std::string_view msg, stdplus::zstring_view intf,
-                decltype(std::declval<Func>()()) fallback, Func&& func) noexcept
+inline decltype(std::declval<Func>()()) ignoreError(
+    std::string_view msg, stdplus::zstring_view intf,
+    decltype(std::declval<Func>()()) fallback, Func&& func) noexcept
 {
     try
     {
@@ -122,22 +122,18 @@ static bool validIntfIP(Addr a) noexcept
     return a.isUnicast() && !a.isLoopback();
 }
 
-EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
-                                     stdplus::PinnedRef<Manager> manager,
-                                     const AllIntfInfo& info,
-                                     std::string_view objRoot,
-                                     const config::Parser& config,
-                                     bool enabled) :
+EthernetInterface::EthernetInterface(
+    stdplus::PinnedRef<sdbusplus::bus_t> bus,
+    stdplus::PinnedRef<Manager> manager, const AllIntfInfo& info,
+    std::string_view objRoot, const config::Parser& config, bool enabled) :
     EthernetInterface(bus, manager, info, makeObjPath(objRoot, *info.intf.name),
                       config, enabled)
 {}
 
-EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
-                                     stdplus::PinnedRef<Manager> manager,
-                                     const AllIntfInfo& info,
-                                     std::string&& objPath,
-                                     const config::Parser& config,
-                                     bool enabled) :
+EthernetInterface::EthernetInterface(
+    stdplus::PinnedRef<sdbusplus::bus_t> bus,
+    stdplus::PinnedRef<Manager> manager, const AllIntfInfo& info,
+    std::string&& objPath, const config::Parser& config, bool enabled) :
     Ifaces(bus, objPath.c_str(), Ifaces::action::defer_emit),
     manager(manager), bus(bus), objPath(std::move(objPath))
 {
@@ -212,21 +208,23 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     EthernetInterfaceIntf::ncsi(false, true);
 
 #if AMI_NCSI_SUPPORT
-    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
+        std::string::npos)
     {
         auto [mode, package, channel] = getNCSIValue(ifaceConfig);
-        ncsiConfig.emplace(bus, this->objPath.c_str(), *this,
-                           mode == "Manual" ? NCSIIface::Mode::Manual
-                                            : NCSIIface::Mode::Auto,
-                           mode == "Manual" ? package : ncsi::MAX_PACKAGE_NUM,
-                           mode == "Manual" ? channel : ncsi::MAX_CHANNEL_NUM);
+        ncsiConfig.emplace(
+            bus, this->objPath.c_str(), *this,
+            mode == "Manual" ? NCSIIface::Mode::Manual : NCSIIface::Mode::Auto,
+            mode == "Manual" ? package : ncsi::MAX_PACKAGE_NUM,
+            mode == "Manual" ? channel : ncsi::MAX_CHANNEL_NUM);
         EthernetInterfaceIntf::ncsi(true, true);
     }
 #endif
 
     if (!ncsi())
     {
-        try {
+        try
+        {
             if (auto phyConf = getPHYInfo(ifaceConfig); phyConf.has_value())
             {
 #if ENABLE_BOND_SUPPORT
@@ -240,14 +238,17 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
                     {
                         EthernetInterfaceIntf::autoNeg(autoNeg, true);
                         EthernetInterfaceIntf::duplex(
-                            duplex == "full" ? Duplex::full : Duplex::half, true);
+                            duplex == "full" ? Duplex::full : Duplex::half,
+                            true);
                         EthernetInterfaceIntf::speed(speed, true);
                         system::setLink(interfaceName(), speed,
-                                        duplex == "full" ? 1 : 0, autoNeg ? 1 : 0);
+                                        duplex == "full" ? 1 : 0,
+                                        autoNeg ? 1 : 0);
                     }
                 }
             }
-        } catch (const std::exception& e)
+        }
+        catch (const std::exception& e)
         {
             log<level::ERR>(fmt::format("e.what() = {}", e.what()).c_str());
         }
@@ -302,7 +303,6 @@ EthernetInterface::EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
 #ifdef NSUPDATE_SUPPORT
     manager.get().getDNSConf().addInterfaceConf(interfaceName());
 #endif
-    
 }
 
 void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
@@ -310,10 +310,12 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     ifIdx = info.idx;
     EthernetInterfaceIntf::linkUp(info.flags & IFF_RUNNING, skipSignal);
 #ifdef AMI_NCSI_SUPPORT
-    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
+        std::string::npos)
     {
         auto v = phosphor::network::ncsi::getLinkStatus(ifIdx);
-        EthernetInterfaceIntf::linkUp(phosphor::network::ncsi::getLinkStatus(ifIdx), skipSignal);
+        EthernetInterfaceIntf::linkUp(
+            phosphor::network::ncsi::getLinkStatus(ifIdx), skipSignal);
     }
 #endif
     config::Parser config(
@@ -724,11 +726,11 @@ ObjectPath EthernetInterface::ip(IP::Protocol protType, std::string ipaddress,
         {
             std::for_each(ipv6IndexUsedList.begin(), ipv6IndexUsedList.end(),
                           [&](const std::optional<std::string> v) {
-                if (v.has_value())
-                {
-                    count += 1;
-                }
-            });
+                              if (v.has_value())
+                              {
+                                  count += 1;
+                              }
+                          });
             if (count >= IPV6_MAX_NUM)
             {
                 auto msg = fmt::format(
@@ -743,11 +745,11 @@ ObjectPath EthernetInterface::ip(IP::Protocol protType, std::string ipaddress,
         {
             std::for_each(ipv4IndexUsedList.begin(), ipv4IndexUsedList.end(),
                           [&](const std::optional<std::string> v) {
-                if (v.has_value())
-                {
-                    count += 1;
-                }
-            });
+                              if (v.has_value())
+                              {
+                                  count += 1;
+                              }
+                          });
             if (count >= IPV4_MAX_NUM)
             {
                 auto msg = fmt::format(
@@ -765,8 +767,8 @@ ObjectPath EthernetInterface::ip(IP::Protocol protType, std::string ipaddress,
                               Argument::ARGUMENT_VALUE(ipaddress.c_str()));
     }
 
-    auto [reload, path] = createStaticIP(protType, ipaddress, prefixLength,
-                                         ipgateway);
+    auto [reload,
+          path] = createStaticIP(protType, ipaddress, prefixLength, ipgateway);
     std::optional<stdplus::SubnetAny> ifaddr;
     try
     {
@@ -795,10 +797,9 @@ ObjectPath EthernetInterface::ip(IP::Protocol protType, std::string ipaddress,
     return path;
 }
 
-ObjectPath EthernetInterface::ipWithIndex(IP::Protocol protType,
-                                          std::string ipaddress,
-                                          uint8_t prefixLength, uint8_t idx,
-                                          std::string ipgateway)
+ObjectPath EthernetInterface::ipWithIndex(
+    IP::Protocol protType, std::string ipaddress, uint8_t prefixLength,
+    uint8_t idx, std::string ipgateway)
 {
     int count = 0;
     std::optional<stdplus::InAnyAddr> addr;
@@ -808,11 +809,11 @@ ObjectPath EthernetInterface::ipWithIndex(IP::Protocol protType,
         {
             std::for_each(ipv6IndexUsedList.begin(), ipv6IndexUsedList.end(),
                           [&](const std::optional<std::string> v) {
-                if (v.has_value())
-                {
-                    count += 1;
-                }
-            });
+                              if (v.has_value())
+                              {
+                                  count += 1;
+                              }
+                          });
             if (idx >= IPV6_MAX_NUM || count >= IPV6_MAX_NUM)
             {
                 auto errMsg = fmt::format("IPv6 Index {} is out of limit {}. ",
@@ -833,11 +834,11 @@ ObjectPath EthernetInterface::ipWithIndex(IP::Protocol protType,
         {
             std::for_each(ipv4IndexUsedList.begin(), ipv4IndexUsedList.end(),
                           [&](const std::optional<std::string> v) {
-                if (v.has_value())
-                {
-                    count += 1;
-                }
-            });
+                              if (v.has_value())
+                              {
+                                  count += 1;
+                              }
+                          });
             if (idx >= IPV4_MAX_NUM || count >= IPV4_MAX_NUM)
             {
                 auto errMsg = fmt::format("IPv4 Index {} is out of limit {}. ",
@@ -865,8 +866,8 @@ ObjectPath EthernetInterface::ipWithIndex(IP::Protocol protType,
                               Argument::ARGUMENT_VALUE(ipaddress.c_str()));
     }
 
-    auto [reload, path] = createStaticIP(protType, ipaddress, prefixLength,
-                                         ipgateway);
+    auto [reload,
+          path] = createStaticIP(protType, ipaddress, prefixLength, ipgateway);
     std::optional<stdplus::SubnetAny> ifaddr;
     try
     {
@@ -921,9 +922,8 @@ void EthernetInterface::delIpIdx(std::string address, IP::Protocol protocolType)
     }
 }
 
-ObjectPath EthernetInterface::neighbor(std::string ipAddress,
-                                       std::string macAddress,
-                                       uint8_t prefixLength)
+ObjectPath EthernetInterface::neighbor(
+    std::string ipAddress, std::string macAddress, uint8_t prefixLength)
 {
     std::optional<stdplus::InAnyAddr> addr;
     try
@@ -1024,7 +1024,7 @@ bool EthernetInterface::dhcp4(bool value)
     {
         if (value)
         {
-            for (const auto& addr : addrs)
+            for (auto& addr : addrs)
             {
                 if (addr.second->type() == IP::Protocol::IPv4)
                 {
@@ -1048,7 +1048,7 @@ bool EthernetInterface::dhcp4(bool value)
         }
         else
         {
-            for (const auto& addr : addrs)
+            for (auto& addr : addrs)
             {
                 if (addr.second->type() == IP::Protocol::IPv4)
                 {
@@ -1088,20 +1088,21 @@ bool EthernetInterface::dhcp6(bool value)
             ipv6IndexUsedList.assign(IPV6_MAX_NUM + 1, std::nullopt);
         } // if
 
-        auto size = addrs.size();
-        for (int i = 0; i < size; i++)
-        {
-            auto it = addrs.begin();
-            if (it != addrs.end())
+        manager.get().addReloadPostHook([&]() {
+            auto size = addrs.size();
+            for (int i = 0; i < size; i++)
             {
-                if (it->second->type() == IP::Protocol::IPv6 &&  it->second->origin() != IP::AddressOrigin::LinkLocal)
+                auto it = addrs.begin();
+                if (it != addrs.end())
                 {
-                    it->second->delete_();
+                    if (it->second->type() == IP::Protocol::IPv6 &&
+                        it->second->origin() != IP::AddressOrigin::LinkLocal)
+                    {
+                        it->second->delete_();
+                    }
                 }
             }
-            else
-                break;
-        }
+        });
 
         writeConfigurationFile();
         manager.get().reloadConfigs();
@@ -1109,8 +1110,8 @@ bool EthernetInterface::dhcp6(bool value)
     return value;
 }
 
-std::vector<std::string>
-    EthernetInterface::domainName(std::vector<std::string> value)
+std::vector<std::string> EthernetInterface::domainName(
+    std::vector<std::string> value)
 {
     bool different = false;
 
@@ -1145,12 +1146,12 @@ std::vector<std::string>
 EthernetInterface::DHCPConf EthernetInterface::dhcpEnabled(DHCPConf value)
 {
     auto old4 = EthernetInterfaceIntf::dhcp4();
-    auto new4 = EthernetInterfaceIntf::dhcp4(value == DHCPConf::v4 ||
-                                             value == DHCPConf::v4v6stateless ||
-                                             value == DHCPConf::both);
+    auto new4 = EthernetInterfaceIntf::dhcp4(
+        value == DHCPConf::v4 || value == DHCPConf::v4v6stateless ||
+        value == DHCPConf::both);
     auto old6 = EthernetInterfaceIntf::dhcp6();
-    auto new6 = EthernetInterfaceIntf::dhcp6(value == DHCPConf::v6 ||
-                                             value == DHCPConf::both);
+    auto new6 = EthernetInterfaceIntf::dhcp6(
+        value == DHCPConf::v6 || value == DHCPConf::both);
 
     if (old4 != new4 || old6 != new6)
     {
@@ -1248,13 +1249,15 @@ bool EthernetInterface::nicEnabled(bool value)
     {
         // We only need to bring down the interface, networkd will always bring
         // up managed interfaces
-        manager.get().addReloadPreHook(
-            [ifname = interfaceName()]() { system::setNICUp(ifname, false); });
+        manager.get().addReloadPreHook([ifname = interfaceName()]() {
+            system::setNICUp(ifname, false);
+        });
     }
     else
     {
-        manager.get().addReloadPreHook(
-            [ifname = interfaceName()]() { system::setNICUp(ifname, true); });
+        manager.get().addReloadPreHook([ifname = interfaceName()]() {
+            system::setNICUp(ifname, true);
+        });
     }
     manager.get().reloadConfigs();
 
@@ -1330,9 +1333,9 @@ void EthernetInterface::loadDomainNames()
 ServerList EthernetInterface::getNTPServerFromTimeSyncd()
 {
     ServerList servers; // Variable to capture the NTP Server IPs
-    auto method = bus.get().new_method_call(TIMESYNCD_SERVICE,
-                                            TIMESYNCD_SERVICE_PATH,
-                                            PROPERTY_INTERFACE, METHOD_GET);
+    auto method =
+        bus.get().new_method_call(TIMESYNCD_SERVICE, TIMESYNCD_SERVICE_PATH,
+                                  PROPERTY_INTERFACE, METHOD_GET);
 
     method.append(TIMESYNCD_INTERFACE, "LinkNTPServers");
 
@@ -1491,13 +1494,13 @@ ObjectPath EthernetInterface::createVLAN(uint16_t id)
 ObjectPath EthernetInterface::createBond(std::string activeSlave,
                                          uint8_t miiMonitor)
 {
-
     for (const auto& [_, intf] : manager.get().interfaces)
     {
         if (intf->interfaceName().find(".") != std::string::npos)
         {
             log<level::ERR>("Bond cannot be enabled as VLAN is enabled");
-            elog<NotAllowed>(NotAllowedArgument::REASON("Bond cannot be enabled as VLAN is enabled"));
+            elog<NotAllowed>(NotAllowedArgument::REASON(
+                "Bond cannot be enabled as VLAN is enabled"));
         }
     }
 
@@ -1655,8 +1658,9 @@ void EthernetInterface::writeIfaceStateFile(std::string ifname)
 
         auto& router = IfaceState.map["IPv6Router"].emplace_back();
         router["IPv6EnableStaticRtr"].emplace_back(
-            it->second->EthernetInterfaceIntf::ipv6EnableStaticRtr() ? "true"
-                                                                     : "false");
+            it->second->EthernetInterfaceIntf::ipv6EnableStaticRtr()
+                ? "true"
+                : "false");
         if (EthernetInterfaceIntf::ipv6EnableStaticRtr())
         {
             router["IPv6StaticRtrAddr"].emplace_back(
@@ -1721,7 +1725,7 @@ void EthernetInterface::writeIfaceStateFile(std::string ifname)
                     gateway4route["DefaultGateway"].emplace_back(
                         defaultgateway4);
                 }
-            }     // if
+            } // if
 
             if (!it->second->dhcp6() &&
                 it->second->EthernetInterfaceIntf::ipv6Enable())
@@ -1749,121 +1753,108 @@ void EthernetInterface::writeIfaceStateFile(std::string ifname)
         }
     }
 #if AMI_NCSI_SUPPORT
-    {
-        {
-            if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos &&
-                EthernetInterface::ncsiConfig.has_value())
-            {
-                auto& ncsi = IfaceState.map["NCSI"].emplace_back();
-                ncsi["Mode"].emplace_back(
-                    EthernetInterface::ncsiConfig.value().mode() ==
-                            NCSIIface::Mode::Auto
-                        ? "Auto"
-                        : "Manual");
-                ncsi["Package"].emplace_back(std::to_string(
-                    EthernetInterface::ncsiConfig.value().package()));
-                ncsi["Channel"].emplace_back(std::to_string(
-                    EthernetInterface::ncsiConfig.value().channel()));
-            }
-        }
-    }
+    {{if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
+              std::string::npos &&
+          EthernetInterface::ncsiConfig.has_value()){
+        auto& ncsi = IfaceState.map["NCSI"].emplace_back();
+    ncsi["Mode"].emplace_back(
+        EthernetInterface::ncsiConfig.value().mode() == NCSIIface::Mode::Auto
+            ? "Auto"
+            : "Manual");
+    ncsi["Package"].emplace_back(
+        std::to_string(EthernetInterface::ncsiConfig.value().package()));
+    ncsi["Channel"].emplace_back(
+        std::to_string(EthernetInterface::ncsiConfig.value().channel()));
+}
+}
+}
 #endif
+{
+    std::vector<uint8_t> value = EthernetInterfaceIntf::dhcpv6TimingConfParam();
+    if (!value.empty())
     {
-        std::vector<uint8_t> value =
-            EthernetInterfaceIntf::dhcpv6TimingConfParam();
-        if (!value.empty())
-        {
-            auto it = value.begin();
+        auto it = value.begin();
 
-            auto& dhcp6TimingConf =
-                IfaceState.map["DHCPv6TimingConf"].emplace_back();
+        auto& dhcp6TimingConf =
+            IfaceState.map["DHCPv6TimingConf"].emplace_back();
 
-            dhcp6TimingConf["SOLMaxDelay"].emplace_back(
-                fmt::format("{}", *it++));
+        dhcp6TimingConf["SOLMaxDelay"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["SOLTimeout"].emplace_back(
-                fmt::format("{}", *it++));
+        dhcp6TimingConf["SOLTimeout"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["SOLMaxRt"].emplace_back(fmt::format("{}", *it++));
+        dhcp6TimingConf["SOLMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["REQTimeout"].emplace_back(
-                fmt::format("{}", *it++));
+        dhcp6TimingConf["REQTimeout"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["REQMaxRt"].emplace_back(fmt::format("{}", *it++));
+        dhcp6TimingConf["REQMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["REQMaxRc"].emplace_back(fmt::format("{}", *it++));
+        dhcp6TimingConf["REQMaxRc"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["RENTimeout"].emplace_back(
-                fmt::format("{}", *it++));
+        dhcp6TimingConf["RENTimeout"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["RENMaxRt"].emplace_back(fmt::format("{}", *it++));
+        dhcp6TimingConf["RENMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["REBTimeout"].emplace_back(
-                fmt::format("{}", *it++));
+        dhcp6TimingConf["REBTimeout"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["REBMaxRt"].emplace_back(fmt::format("{}", *it++));
+        dhcp6TimingConf["REBMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["INFTimeout"].emplace_back(
-                fmt::format("{}", *it++));
+        dhcp6TimingConf["INFTimeout"].emplace_back(fmt::format("{}", *it++));
 
-            dhcp6TimingConf["INFMaxRt"].emplace_back(fmt::format("{}", *it));
-        }
+        dhcp6TimingConf["INFMaxRt"].emplace_back(fmt::format("{}", *it));
     }
+}
 
+{
+    std::vector<uint8_t> value =
+        EthernetInterfaceIntf::ipv6SLAACTimingConfParam();
+    if (!value.empty())
     {
-        std::vector<uint8_t> value =
-            EthernetInterfaceIntf::ipv6SLAACTimingConfParam();
-        if (!value.empty())
-        {
-            auto it = value.begin();
+        auto it = value.begin();
 
-            auto& slaacTimingConf =
-                IfaceState.map["SLAACTimingConf"].emplace_back();
+        auto& slaacTimingConf =
+            IfaceState.map["SLAACTimingConf"].emplace_back();
 
-            slaacTimingConf["MaxRtrSolicitationDelay"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["MaxRtrSolicitationDelay"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["RtrSolicitationInterval"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["RtrSolicitationInterval"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["MaxRtrSolicitations"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["MaxRtrSolicitations"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["DupAddrDetectTransmits"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["DupAddrDetectTransmits"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["MaxMulticastSolicit"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["MaxMulticastSolicit"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["MaxUnicastSolicit"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["MaxUnicastSolicit"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["MaxAnycastDelayTime"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["MaxAnycastDelayTime"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["MaxNeighborAdvertisement"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["MaxNeighborAdvertisement"].emplace_back(
+            fmt::format("{}", *it++));
 
-            slaacTimingConf["ReachableTime"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["ReachableTime"].emplace_back(fmt::format("{}", *it++));
 
-            slaacTimingConf["RetransTimer"].emplace_back(
-                fmt::format("{}", *it++));
+        slaacTimingConf["RetransTimer"].emplace_back(fmt::format("{}", *it++));
 
-            slaacTimingConf["DelayFirstProbeTime"].emplace_back(
-                fmt::format("{}", *it++));
-        }
+        slaacTimingConf["DelayFirstProbeTime"].emplace_back(
+            fmt::format("{}", *it++));
     }
+}
 
-    IfaceState.writeFile(fs::path{
-        fmt::format("{}/{}", manager.get().ifaceConfDir.generic_string(),
-                    ifname)
-            .c_str()});
-    lg2::info("Wrote networkd file: {CFG_FILE}", "CFG_FILE",
-              fs::path{fmt::format("{}/{}",
-                                   manager.get().ifaceConfDir.generic_string(),
-                                   ifname)
-                           .c_str()});
+IfaceState.writeFile(fs::path{
+    fmt::format("{}/{}", manager.get().ifaceConfDir.generic_string(), ifname)
+        .c_str()});
+lg2::info("Wrote networkd file: {CFG_FILE}", "CFG_FILE",
+          fs::path{
+              fmt::format("{}/{}", manager.get().ifaceConfDir.generic_string(),
+                          ifname)
+                  .c_str()});
 }
 
 ServerList EthernetInterface::ntpServers(ServerList /*servers*/)
@@ -1976,10 +1967,11 @@ void EthernetInterface::writeConfigurationFile()
         std::error_code ec{};
         if (fs::exists(config::pathForIntfConf(manager.get().getConfDir(),
                                                interfaceName()),
-                       ec)
-            && (!fs::exists(config::pathForIntfConf(manager.get().getBondingConfBakDir(),
-                                               interfaceName()),
-                       ec)) )
+                       ec) &&
+            (!fs::exists(
+                config::pathForIntfConf(manager.get().getBondingConfBakDir(),
+                                        interfaceName()),
+                ec)))
         {
             if (!fs::copy_file(
                     config::pathForIntfConf(manager.get().getConfDir(),
@@ -2030,9 +2022,9 @@ void EthernetInterface::writeConfigurationFile()
 #endif
     {
         config.map["Match"].emplace_back()["Name"].emplace_back(
-        interfaceName());
+            interfaceName());
         {
-                auto& link = config.map["Link"].emplace_back();
+            auto& link = config.map["Link"].emplace_back();
 #ifdef PERSIST_MAC
             auto mac = MacAddressIntf::macAddress();
             if (!mac.empty())
@@ -2049,7 +2041,7 @@ void EthernetInterface::writeConfigurationFile()
             auto& network = config.map["Network"].emplace_back();
             {
                 auto& lla = network["LinkLocalAddressing"];
-    #ifdef LINK_LOCAL_AUTOCONFIGURATION
+#ifdef LINK_LOCAL_AUTOCONFIGURATION
                 switch (EthernetInterfaceIntf::linkLocalAutoConf())
                 {
                     case EthernetInterface::LinkLocalConf::v4:
@@ -2075,10 +2067,12 @@ void EthernetInterface::writeConfigurationFile()
             writeIfaceStateFile(interfaceName());
 
             network["IPv6AcceptRA"].emplace_back(
-                EthernetInterfaceIntf::ipv6Enable() && ipv6AcceptRA() ? "true"
-                                                                    : "false");
-            network["DHCP"].emplace_back(dhcp4() ? (dhcp6() ? "true" : "ipv4")
-                                                : (dhcp6() ? "ipv6" : "false"));
+                EthernetInterfaceIntf::ipv6Enable() && ipv6AcceptRA()
+                    ? "true"
+                    : "false");
+            network["DHCP"].emplace_back(
+                dhcp4() ? (dhcp6() ? "true" : "ipv4")
+                        : (dhcp6() ? "ipv6" : "false"));
             {
                 if (int size = domainName().size(); size > 0)
                 {
@@ -2102,14 +2096,16 @@ void EthernetInterface::writeConfigurationFile()
             }
             {
                 auto& ntps = network["NTP"];
-                for (const auto& ntp : EthernetInterfaceIntf::staticNTPServers())
+                for (const auto& ntp :
+                     EthernetInterfaceIntf::staticNTPServers())
                 {
                     ntps.emplace_back(ntp);
                 }
             }
             {
                 auto& dnss = network["DNS"];
-                for (const auto& dns : EthernetInterfaceIntf::staticNameServers())
+                for (const auto& dns :
+                     EthernetInterfaceIntf::staticNameServers())
                 {
                     dnss.emplace_back(dns);
                 }
@@ -2118,10 +2114,10 @@ void EthernetInterface::writeConfigurationFile()
                 auto& address = network["Address"];
                 for (const auto& addr : addrs)
                 {
-                    if ((addr.second->type() == IP::Protocol::IPv6 && !dhcp6() &&
-                        EthernetInterfaceIntf::ipv6Enable()) ||
-                        (addr.second->type() == IP::Protocol::IPv4 && !dhcp4() &&
-                        EthernetInterfaceIntf::ipv4Enable()))
+                    if ((addr.second->type() == IP::Protocol::IPv6 &&
+                         !dhcp6() && EthernetInterfaceIntf::ipv6Enable()) ||
+                        (addr.second->type() == IP::Protocol::IPv4 &&
+                         !dhcp4() && EthernetInterfaceIntf::ipv4Enable()))
                     {
                         {
                             if (originIsManuallyAssigned(addr.second->origin()))
@@ -2140,20 +2136,23 @@ void EthernetInterface::writeConfigurationFile()
                     auto gateway4 = EthernetInterfaceIntf::defaultGateway();
                     if (!gateway4.empty())
                     {
-                        auto& gateway4route = config.map["Route"].emplace_back();
+                        auto& gateway4route =
+                            config.map["Route"].emplace_back();
                         gateway4route["Gateway"].emplace_back(gateway4);
                         gateway4route["GatewayOnLink"].emplace_back("true");
                     }
 
-                    auto backupgateway4 = EthernetInterfaceIntf::backupGateway();
+                    auto backupgateway4 =
+                        EthernetInterfaceIntf::backupGateway();
                     if (!backupgateway4.empty())
                     {
-                        auto& gateway4route = config.map["Route"].emplace_back();
+                        auto& gateway4route =
+                            config.map["Route"].emplace_back();
                         gateway4route["Gateway"].emplace_back(backupgateway4);
                         gateway4route["Metric"].emplace_back(fmt::format(
                             "{}", getMetricValueDefaultGateway(
-                                    EthernetInterfaceIntf::defaultGateway()) +
-                                    1));
+                                      EthernetInterfaceIntf::defaultGateway()) +
+                                      1));
                     }
                 }
 
@@ -2162,7 +2161,8 @@ void EthernetInterface::writeConfigurationFile()
                     auto gateway6 = EthernetInterfaceIntf::defaultGateway6();
                     if (!gateway6.empty())
                     {
-                        auto& gateway6route = config.map["Route"].emplace_back();
+                        auto& gateway6route =
+                            config.map["Route"].emplace_back();
                         gateway6route["Gateway"].emplace_back(gateway6);
                         gateway6route["GatewayOnLink"].emplace_back("true");
                     }
@@ -2171,9 +2171,10 @@ void EthernetInterface::writeConfigurationFile()
         }
         {
             auto& ipv6acceptra = config.map["IPv6AcceptRA"].emplace_back();
-            ipv6acceptra["DHCPv6Client"].emplace_back(dhcp6() ? "true" : "false");
-            ipv6acceptra["UseAutonomousPrefix"].emplace_back(dhcp6() ? "true"
-                                                                    : "false");
+            ipv6acceptra["DHCPv6Client"].emplace_back(
+                dhcp6() ? "true" : "false");
+            ipv6acceptra["UseAutonomousPrefix"].emplace_back(
+                dhcp6() ? "true" : "false");
         }
         {
             auto& neighbors = config.map["Neighbor"];
@@ -2181,7 +2182,8 @@ void EthernetInterface::writeConfigurationFile()
             {
                 auto& neighbor = neighbors.emplace_back();
                 neighbor["Address"].emplace_back(sneighbor.second->ipAddress());
-                neighbor["MACAddress"].emplace_back(sneighbor.second->macAddress());
+                neighbor["MACAddress"].emplace_back(
+                    sneighbor.second->macAddress());
             }
         }
         {
@@ -2197,33 +2199,38 @@ void EthernetInterface::writeConfigurationFile()
             dhcp4["UseDNS"].emplace_back(tfStr(dhcp4Conf->dnsEnabled()));
             dhcp4["UseDomains"].emplace_back(tfStr(dhcp4Conf->domainEnabled()));
             dhcp4["UseNTP"].emplace_back(tfStr(dhcp4Conf->ntpEnabled()));
-            dhcp4["UseHostname"].emplace_back(tfStr(dhcp4Conf->hostNameEnabled()));
+            dhcp4["UseHostname"].emplace_back(
+                tfStr(dhcp4Conf->hostNameEnabled()));
             dhcp4["SendHostname"].emplace_back(
                 tfStr(dhcp4Conf->sendHostNameEnabled()));
             dhcp4["SendNsupdate"].emplace_back(
                 tfStr(dhcp4Conf->sendHostNameEnabled()));
-        if (!dhcp4Conf->vendorClassIdentifier().empty())
-            dhcp4["VendorClassIdentifier"].emplace_back(dhcp4Conf->vendorClassIdentifier());
+            if (!dhcp4Conf->vendorClassIdentifier().empty())
+                dhcp4["VendorClassIdentifier"].emplace_back(
+                    dhcp4Conf->vendorClassIdentifier());
 
-        for (auto it = dhcp4Conf->vendorOptionList.begin(); it != dhcp4Conf->vendorOptionList.end(); it++)
-        {
-            dhcp4["SendVendorOption"].emplace_back(fmt::format("{}:string:{}", it->first, it->second).c_str());
-        }
+            for (auto it = dhcp4Conf->vendorOptionList.begin();
+                 it != dhcp4Conf->vendorOptionList.end(); it++)
+            {
+                dhcp4["SendVendorOption"].emplace_back(
+                    fmt::format("{}:string:{}", it->first, it->second).c_str());
+            }
         }
         {
             auto& dhcp6 = config.map["DHCPv6"].emplace_back();
             dhcp6["UseDNS"].emplace_back(tfStr(dhcp6Conf->dnsEnabled()));
             dhcp6["UseDomains"].emplace_back(tfStr(dhcp6Conf->domainEnabled()));
             dhcp6["UseNTP"].emplace_back(tfStr(dhcp6Conf->ntpEnabled()));
-            dhcp6["UseHostname"].emplace_back(tfStr(dhcp6Conf->hostNameEnabled()));
+            dhcp6["UseHostname"].emplace_back(
+                tfStr(dhcp6Conf->hostNameEnabled()));
             dhcp6["SendHostname"].emplace_back(
                 tfStr(dhcp6Conf->sendHostNameEnabled()));
             dhcp6["SendNsupdate"].emplace_back(
                 tfStr(dhcp6Conf->sendHostNameEnabled()));
         }
     }
-    auto path = config::pathForIntfConf(manager.get().getConfDir(),
-                                        interfaceName());
+    auto path =
+        config::pathForIntfConf(manager.get().getConfDir(), interfaceName());
     config.writeFile(path);
     lg2::info("Wrote networkd file: {CFG_FILE}", "CFG_FILE", path);
     writeUpdatedTime(manager, path);
@@ -2253,9 +2260,10 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
     {
         newMAC = stdplus::fromStr<stdplus::EtherAddr>(value);
     }
-    catch (const std::exception &e )
+    catch (const std::exception& e)
     {
-        lg2::error("MAC Address {MAC_ADDRESS} is not valid: {REASON}", "MAC_ADDRESS", value, "REASON", e.what());
+        lg2::error("MAC Address {MAC_ADDRESS} is not valid: {REASON}",
+                   "MAC_ADDRESS", value, "REASON", e.what());
         elog<InvalidArgument>(Argument::ARGUMENT_NAME("MACAddress"),
                               Argument::ARGUMENT_VALUE(value.c_str()));
     }
@@ -2273,9 +2281,9 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
     auto oldMAC =
         stdplus::fromStr<stdplus::EtherAddr>(MacAddressIntf::macAddress());
 
-    std::string activeSlaveInterface="";
+    std::string activeSlaveInterface = "";
 #if ENABLE_BOND_SUPPORT
-    auto bondEnabled=false;
+    auto bondEnabled = false;
 #endif
     if (newMAC != oldMAC)
     {
@@ -2287,25 +2295,26 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 intf->MacAddressIntf::macAddress(validMAC);
             }
 #if ENABLE_BOND_SUPPORT
-            if(intf->interfaceName() == "bond0")
+            if (intf->interfaceName() == "bond0")
             {
-                bondEnabled=true;
+                bondEnabled = true;
                 activeSlaveInterface = intf->bonding->activeSlave();
             }
 #endif
         }
 #if ENABLE_BOND_SUPPORT
-            manager.get().addReloadPreHook([this, bondEnabled, validMAC, activeSlaveInterface,
-                              interface, manager = manager]() {
+        manager.get().addReloadPreHook([this, bondEnabled, validMAC,
+                                        activeSlaveInterface, interface,
+                                        manager = manager]() {
             // handle bonding mac address update for slave and bond
-            if(bondEnabled)
+            if (bondEnabled)
             {
                 std::string intf = (interface == "bond0") ? "eth0" : interface;
-                if(intf == activeSlaveInterface)
+                if (intf == activeSlaveInterface)
                 {
                     for (const auto& [_, intf] : manager.get().interfaces)
                     {
-                        if(intf->interfaceName() == "bond0")
+                        if (intf->interfaceName() == "bond0")
                         {
                             intf->MacAddressIntf::macAddress(validMAC);
                             intf->writeConfigurationFile();
@@ -2314,19 +2323,20 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                         }
                     }
                 }
-                else // update mac address for slave of bonding interface when it is not active slave
+                else // update mac address for slave of bonding interface when
+                     // it is not active slave
                 {
-                    this->updateBondConfBackupForSlaveMAC(validMAC,intf);
+                    this->updateBondConfBackupForSlaveMAC(validMAC, intf);
                 }
             }
             else
             {
                 this->MacAddressIntf::macAddress(validMAC);
                 this->writeConfigurationFile();
-                // The MAC and LLADDRs will only update if the NIC is already down
+                // The MAC and LLADDRs will only update if the NIC is already
+                // down
                 system::setNICUp(interface, false);
             }
-
 
             writeUpdatedTime(
                 manager,
@@ -2442,14 +2452,14 @@ std::string EthernetInterface::defaultGateway(std::string gateway)
         }
         gateway = EthernetInterfaceIntf::defaultGateway(std::move(gateway));
         auto [mac, prefixLength] = getDwMacAddrByIP(gateway);
-        manager.get().addNeighbor(
-            NeighborInfo{.ifidx = ifIdx,
-                         .state = NUD_PERMANENT,
-                         .addr = stdplus::fromStr<stdplus::In4Addr>(
-                             EthernetInterfaceIntf::defaultGateway()),
-                         .mac = stdplus::fromStr<stdplus::EtherAddr>(
-                             mac.value_or("00:00:00:00:00:00")),
-                         .prefixLength = prefixLength});
+        manager.get().addNeighbor(NeighborInfo{
+            .ifidx = ifIdx,
+            .state = NUD_PERMANENT,
+            .addr = stdplus::fromStr<stdplus::In4Addr>(
+                EthernetInterfaceIntf::defaultGateway()),
+            .mac = stdplus::fromStr<stdplus::EtherAddr>(
+                mac.value_or("00:00:00:00:00:00")),
+            .prefixLength = prefixLength});
         writeConfigurationFile();
         manager.get().reloadConfigs();
     }
@@ -2550,8 +2560,9 @@ void EthernetInterface::VlanProperties::delete_()
     if (eth.get().ifIdx > 0)
     {
         // We need to forcibly delete the interface as systemd does not
-        eth.get().manager.get().addReloadPostHook(
-            [idx = eth.get().ifIdx]() { system::deleteIntf(idx); });
+        eth.get().manager.get().addReloadPostHook([idx = eth.get().ifIdx]() {
+            system::deleteIntf(idx);
+        });
 
         eth.get().manager.get().addReloadPostHook([parentIfName]() {
             execute("/bin/systemctl", "systemctl", "restart",
@@ -2608,8 +2619,8 @@ int EthernetInterface::writeJsonFile(const std::string& configFile,
     return 0;
 }
 
-std::string
-    EthernetInterface::getChannelPrivilege(const std::string& interfaceName)
+std::string EthernetInterface::getChannelPrivilege(
+    const std::string& interfaceName)
 {
     std::string priv(defaultChannelPriv);
     std::string retPriv;
@@ -2657,8 +2668,8 @@ std::string EthernetInterface::maxPrivilege(std::string priv)
 
     if (!priv.empty() &&
         (std::find(manager.get().supportedPrivList.begin(),
-                   manager.get().supportedPrivList.end(),
-                   priv) == manager.get().supportedPrivList.end()))
+                   manager.get().supportedPrivList.end(), priv) ==
+         manager.get().supportedPrivList.end()))
     {
         log<level::ERR>("Invalid privilege");
         elog<InvalidArgument>(Argument::ARGUMENT_NAME("Privilege"),
@@ -2798,9 +2809,11 @@ bool EthernetInterface::ipv6Enable(bool value)
 
     if (value)
     {
-        std::system(fmt::format("ip link set dev {} down", interfaceName()).c_str());
+        std::system(
+            fmt::format("ip link set dev {} down", interfaceName()).c_str());
         std::this_thread::sleep_for(std::chrono::seconds(3));
-        std::system(fmt::format("ip link set dev {} up", interfaceName()).c_str());
+        std::system(
+            fmt::format("ip link set dev {} up", interfaceName()).c_str());
         EthernetInterfaceIntf::ipv6Enable(value);
         dhcp6(value);
     }
@@ -2808,13 +2821,14 @@ bool EthernetInterface::ipv6Enable(bool value)
     {
         manager.get().addReloadPostHook([&]() {
             std::this_thread::sleep_for(std::chrono::seconds(10));
-            lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME", interfaceName());
-            std::system(fmt::format("ip -6 addr flush dev {}", interfaceName()).c_str());
+            lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME",
+                      interfaceName());
+            std::system(fmt::format("ip -6 addr flush dev {}", interfaceName())
+                            .c_str());
         });
         dhcp6(value);
         EthernetInterfaceIntf::ipv6Enable(value);
     }
-
 
     writeConfigurationFile();
     return value;
@@ -2927,12 +2941,12 @@ void EthernetInterface::writeConfiguration()
 
     auto& Garp = config.map["GARP"].emplace_back();
     Garp["Interval"].emplace_back(garpIntv);
-    Garp["Enabled"].emplace_back((ARPControlIface::gratuitousARP()) ? "true"
-                                                                    : "false");
+    Garp["Enabled"].emplace_back(
+        (ARPControlIface::gratuitousARP()) ? "true" : "false");
 
     auto& ARPResp = config.map["ARP_Response"].emplace_back();
-    ARPResp["Enabled"].emplace_back((ARPControlIface::arpResponse()) ? "true"
-                                                                     : "false");
+    ARPResp["Enabled"].emplace_back(
+        (ARPControlIface::arpResponse()) ? "true" : "false");
     config.writeFile(confPath.string());
 }
 
@@ -2996,9 +3010,10 @@ int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
     try
     {
         unsigned char negotiation = static_cast<unsigned char>(autoNeg);
-        system::setLink(interfaceName(), negotiation == 1 ? 1000 : speed,
-                        negotiation == 1? 1 : static_cast<unsigned char>(duplex),
-                        static_cast<unsigned char>(autoNeg));
+        system::setLink(
+            interfaceName(), negotiation == 1 ? 1000 : speed,
+            negotiation == 1 ? 1 : static_cast<unsigned char>(duplex),
+            static_cast<unsigned char>(autoNeg));
     }
     catch (const std::exception& e)
     {
@@ -3020,7 +3035,7 @@ int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
     log<level::ERR>("PHY Configuration feature is not enabled..\n");
     elog<UnsupportedRequest>(
         Unsupported::REASON("PHY Configuration feature is not enabled..\n"));
-#endif    
+#endif
 }
 
 uint32_t EthernetInterface::speed() const
@@ -3346,22 +3361,22 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                 sdbusplus::bus::match::rules::propertiesChanged(
                     DHCP_SERVICE_PATH, DHCP_PROP_INTERFACE),
                 [&](sdbusplus::message::message& msg) {
-                std::map<std::string, std::variant<bool>> props;
-                std::string iface;
-                bool value;
-                msg.read(iface, props);
-                for (const auto& t : props)
-                {
-                    if (t.first == "DNSEnabled")
+                    std::map<std::string, std::variant<bool>> props;
+                    std::string iface;
+                    bool value;
+                    msg.read(iface, props);
+                    for (const auto& t : props)
                     {
-                        value = std::get<bool>(t.second);
-                        if (value)
+                        if (t.first == "DNSEnabled")
                         {
-                            EthernetInterfaceIntf::domainName({});
+                            value = std::get<bool>(t.second);
+                            if (value)
+                            {
+                                EthernetInterfaceIntf::domainName({});
+                            }
                         }
                     }
-                }
-            });
+                });
         }
         else if (signal.second == nullptr && signal.first == "ResolvdSignal")
         {
@@ -3370,22 +3385,23 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                 sdbusplus::bus::match::rules::propertiesChanged(
                     RESOLVD_OBJ_PATH, RESOLVD_MANAGER_INTERFACE),
                 [&](sdbusplus::message::message& msg) {
-                std::map<std::string,
-                         std::variant<
-                             std::vector<std::tuple<int, std::string, bool>>,
-                             std::vector<
-                                 std::tuple<int, int, std::vector<uint8_t>>>>>
-                    props;
-                std::string iface;
-                std::vector<std::tuple<std::string, bool>> value;
-                msg.read(iface, props);
-                for (const auto& t : props)
-                {
-                    auto vector = getDomainNamesFromResolvd();
-                    EthernetInterfaceIntf::domainName(
-                        getDomainNamesFromResolvd());
-                }
-            });
+                    std::map<
+                        std::string,
+                        std::variant<
+                            std::vector<std::tuple<int, std::string, bool>>,
+                            std::vector<
+                                std::tuple<int, int, std::vector<uint8_t>>>>>
+                        props;
+                    std::string iface;
+                    std::vector<std::tuple<std::string, bool>> value;
+                    msg.read(iface, props);
+                    for (const auto& t : props)
+                    {
+                        auto vector = getDomainNamesFromResolvd();
+                        EthernetInterfaceIntf::domainName(
+                            getDomainNamesFromResolvd());
+                    }
+                });
         }
         else if (signal.second == nullptr && signal.first == "LinkSignal")
         {
@@ -3397,110 +3413,117 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                         .c_str(),
                     NETWORKD_LINK_INTERFACE),
                 [&](sdbusplus::message::message& msg) {
-                std::map<
-                    std::string,
-                    std::variant<std::string, std::tuple<uint64_t, uint64_t>>>
-                    props;
-                std::string iface;
-                std::vector<std::tuple<std::string, bool>> value;
-                msg.read(iface, props);
-                for (const auto& t : props)
-                {
-                    if (t.first == "IPv6AddressState")
+                    std::map<std::string,
+                             std::variant<std::string,
+                                          std::tuple<uint64_t, uint64_t>>>
+                        props;
+                    std::string iface;
+                    std::vector<std::tuple<std::string, bool>> value;
+                    msg.read(iface, props);
+                    for (const auto& t : props)
                     {
-                        if (std::get<std::string>(t.second) == "routable" &&
-                            dhcp6())
+                        if (t.first == "IPv6AddressState")
                         {
-                            // std::this_thread::sleep_for(std::chrono::seconds(5));
-                            auto lists = manager.get().getGateway6FromFile();
-                            for (auto line : lists)
+                            if (std::get<std::string>(t.second) == "routable" &&
+                                dhcp6())
                             {
-                                std::stringstream ss(line);
-                                std::string dstIP, dstPrefix, srcIP, srcPrefix,
-                                    nextHop, metric, count, useCount, devName,
-                                    flags;
-                                ss >> dstIP >> dstPrefix >> srcIP >>
-                                    srcPrefix >> nextHop >> flags >> metric >>
-                                    count >> useCount >> devName;
-                                if (devName.compare(interfaceName()) != 0)
-                                    continue;
-                                int flagInt = std::stoul(flags, 0, 16);
-                                if (((flagInt & 0x400) == 0x400) &&
-                                    nextHop.compare(
-                                        "00000000000000000000000000000000") !=
-                                        0)
+                                // std::this_thread::sleep_for(std::chrono::seconds(5));
+                                auto lists =
+                                    manager.get().getGateway6FromFile();
+                                for (auto line : lists)
                                 {
-                                    for (int i = 4; i < nextHop.size();
-                                         i = i + 4)
+                                    std::stringstream ss(line);
+                                    std::string dstIP, dstPrefix, srcIP,
+                                        srcPrefix, nextHop, metric, count,
+                                        useCount, devName, flags;
+                                    ss >> dstIP >> dstPrefix >> srcIP >>
+                                        srcPrefix >> nextHop >> flags >>
+                                        metric >> count >> useCount >> devName;
+                                    if (devName.compare(interfaceName()) != 0)
+                                        continue;
+                                    int flagInt = std::stoul(flags, 0, 16);
+                                    if (((flagInt & 0x400) == 0x400) &&
+                                        nextHop.compare(
+                                            "00000000000000000000000000000000") !=
+                                            0)
                                     {
-                                        nextHop.insert(i, ":");
-                                        i++;
+                                        for (int i = 4; i < nextHop.size();
+                                             i = i + 4)
+                                        {
+                                            nextHop.insert(i, ":");
+                                            i++;
+                                        }
+                                        in6_addr addr;
+                                        char buf[INET6_ADDRSTRLEN] = {0};
+                                        inet_pton(AF_INET6, nextHop.c_str(),
+                                                  &addr);
+                                        inet_ntop(AF_INET6, &addr, buf,
+                                                  INET6_ADDRSTRLEN);
+                                        EthernetInterfaceIntf::defaultGateway6(
+                                            std::string{buf}, true);
+                                        break;
                                     }
-                                    in6_addr addr;
-                                    char buf[INET6_ADDRSTRLEN] = {0};
-                                    inet_pton(AF_INET6, nextHop.c_str(), &addr);
-                                    inet_ntop(AF_INET6, &addr, buf,
-                                              INET6_ADDRSTRLEN);
-                                    EthernetInterfaceIntf::defaultGateway6(
-                                        std::string{buf}, true);
-                                    break;
                                 }
                             }
                         }
-                    }
-                    else if (t.first == "IPv4AddressState")
-                    {
-                        if (std::get<std::string>(t.second) == "routable" &&
-                            dhcp4())
+                        else if (t.first == "IPv4AddressState")
                         {
-                            // std::this_thread::sleep_for(std::chrono::seconds(5));
-                            auto lists = manager.get().getGatewayFromFile();
-                            for (auto line : lists)
+                            if (std::get<std::string>(t.second) == "routable" &&
+                                dhcp4())
                             {
-                                std::stringstream ss(line);
-                                std::string Iface, dst, gateway, flags,
-                                    cnt, use, metric, mask, mtu, window,
-                                    irtt;
-                                ss >> Iface >> dst >> gateway >>
-                                    flags >> cnt >> use >> metric >>
-                                    mask >> mtu >> window >> irtt;
-                                if (Iface.compare(interfaceName()) != 0)
-                                    continue;
-                                int flagInt = std::stoul(flags, 0, 16);
-                                if (((flagInt & 0x2) == 0x2) &&
-                                    gateway.compare(
-                                        "00000000") !=
-                                        0)
+                                // std::this_thread::sleep_for(std::chrono::seconds(5));
+                                auto lists = manager.get().getGatewayFromFile();
+                                for (auto line : lists)
                                 {
-                                    auto gwInt = std::stoul(gateway, 0, 16);
-                                    auto gwStr = fmt::format("{}.{}.{}.{}",
-                                                            (gwInt & 0x000000FF),
-                                                            (gwInt & 0x0000FF00) >> 8,
-                                                            (gwInt & 0x00FF0000) >> 16,
-                                                            (gwInt & 0xFF000000) >> 24);
-                                    EthernetInterfaceIntf::defaultGateway(
-                                        std::string{gwStr}, true);
-                                    break;
+                                    std::stringstream ss(line);
+                                    std::string Iface, dst, gateway, flags, cnt,
+                                        use, metric, mask, mtu, window, irtt;
+                                    ss >> Iface >> dst >> gateway >> flags >>
+                                        cnt >> use >> metric >> mask >> mtu >>
+                                        window >> irtt;
+                                    if (Iface.compare(interfaceName()) != 0)
+                                        continue;
+                                    int flagInt = std::stoul(flags, 0, 16);
+                                    if (((flagInt & 0x2) == 0x2) &&
+                                        gateway.compare("00000000") != 0)
+                                    {
+                                        auto gwInt = std::stoul(gateway, 0, 16);
+                                        auto gwStr = fmt::format(
+                                            "{}.{}.{}.{}", (gwInt & 0x000000FF),
+                                            (gwInt & 0x0000FF00) >> 8,
+                                            (gwInt & 0x00FF0000) >> 16,
+                                            (gwInt & 0xFF000000) >> 24);
+                                        EthernetInterfaceIntf::defaultGateway(
+                                            std::string{gwStr}, true);
+                                        break;
+                                    }
                                 }
                             }
                         }
-                    }
-                    else if (t.first == "OnlineState" && manager.get().initCompleted)
-                    {
-                        if ((std::get<std::string>(t.second) == "online") && (interfaceName() != "hostusb0"))
+                        else if (t.first == "OnlineState" &&
+                                 manager.get().initCompleted)
                         {
-                            manager.get().reconfigLink(ifIdx);
-#ifdef AMI_NCSI_SUPPORT
-                            if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
+                            if ((std::get<std::string>(t.second) == "online") &&
+                                (interfaceName() != "hostusb0"))
                             {
-                                auto v = phosphor::network::ncsi::getLinkStatus(ifIdx);
-                                EthernetInterfaceIntf::linkUp(phosphor::network::ncsi::getLinkStatus(ifIdx), true);
-                            }
+                                manager.get().reconfigLink(ifIdx);
+#ifdef AMI_NCSI_SUPPORT
+                                if (std::string{DEFAULT_NCSI_INTERFACE}.find(
+                                        interfaceName()) != std::string::npos)
+                                {
+                                    auto v =
+                                        phosphor::network::ncsi::getLinkStatus(
+                                            ifIdx);
+                                    EthernetInterfaceIntf::linkUp(
+                                        phosphor::network::ncsi::getLinkStatus(
+                                            ifIdx),
+                                        true);
+                                }
 #endif
+                            }
                         }
                     }
-                }
-            });
+                });
         }
     }
 }
@@ -3536,7 +3559,6 @@ std::vector<RACFG_T> EthernetInterface::getIPv6DynamicRouterInfo()
         lg2::error("Failed with exception : {ERROR}", "ERROR", e);
     }
 }
-
 
 std::string EthernetInterface::dhcpv6DUID() const
 {
@@ -3890,8 +3912,8 @@ void EthernetInterface::dhcpv6TimingParamWriteConfFile(config::Parser& config)
 }
 
 /** Set value of DHCPv6TimingConfParam */
-std::vector<uint8_t>
-    EthernetInterface::dhcpv6TimingConfParam(std::vector<uint8_t> value)
+std::vector<uint8_t> EthernetInterface::dhcpv6TimingConfParam(
+    std::vector<uint8_t> value)
 {
     if (value.size() != MAX_SUPPORTED_DHCPv6_TIMING_PARAMS)
     {
@@ -4135,8 +4157,8 @@ static uint8_t convertSLAACTimingParamValueToActual(uint8_t value, int index)
 }
 
 /** Set value of IPv6SLAACTimingConfParam */
-std::vector<uint8_t>
-    EthernetInterface::ipv6SLAACTimingConfParam(std::vector<uint8_t> value)
+std::vector<uint8_t> EthernetInterface::ipv6SLAACTimingConfParam(
+    std::vector<uint8_t> value)
 {
     const std::string procConfLoc = "/proc/sys/net/ipv6/conf/";
     const std::string procNeighLoc = "/proc/sys/net/ipv6/neigh/";
@@ -4478,10 +4500,10 @@ std::string EthernetInterface::backupGatewayMACAddress() const
         return {};
     }
 
-    std::string command = std::string("ip neigh get ") +
-                          EthernetInterfaceIntf::backupGateway().c_str() +
-                          std::string(" dev ") + interfaceName().c_str() +
-                          std::string(" 2>/dev/null");
+    std::string command =
+        std::string("ip neigh get ") +
+        EthernetInterfaceIntf::backupGateway().c_str() + std::string(" dev ") +
+        interfaceName().c_str() + std::string(" 2>/dev/null");
 
     char data[80] = {0};
 
@@ -4518,7 +4540,7 @@ std::string EthernetInterface::backupGatewayMACAddress() const
 void EthernetInterface::migrateIPIndex(std::string dst)
 {
     auto it_dst = manager.get().interfaces.find(dst);
-    if (it_dst != manager.get().interfaces.end() )
+    if (it_dst != manager.get().interfaces.end())
     {
         it_dst->second->ipv4IndexUsedList = std::move(this->ipv4IndexUsedList);
         it_dst->second->ipv6IndexUsedList = std::move(this->ipv6IndexUsedList);
@@ -4526,19 +4548,19 @@ void EthernetInterface::migrateIPIndex(std::string dst)
 }
 
 #if ENABLE_BOND_SUPPORT
-void EthernetInterface::updateBondConfBackupForSlaveMAC(std::string newMAC, std::string interface)
+void EthernetInterface::updateBondConfBackupForSlaveMAC(std::string newMAC,
+                                                        std::string interface)
 {
     std::ofstream ofs;
     std::ifstream ifs;
 
-    ifs.open(config::pathForIntfConf(
-        manager.get().getBondingConfBakDir(), interface));
+    ifs.open(config::pathForIntfConf(manager.get().getBondingConfBakDir(),
+                                     interface));
     if (!ifs.is_open())
     {
         log<level::INFO>(
             "updateBondConfBackupForSlaveMAC slave configuration file not opened.\n");
     }
-
 
     std::stringstream buffer;
     buffer << ifs.rdbuf();
@@ -4550,35 +4572,47 @@ void EthernetInterface::updateBondConfBackupForSlaveMAC(std::string newMAC, std:
     std::string searchString = "MACAddress=";
     size_t pos = 0;
 
-    // Iterate through the content to modify only the MACAddress in the [Link] section
-    while ((pos = fileContent.find("[", pos)) != std::string::npos) {
+    // Iterate through the content to modify only the MACAddress in the [Link]
+    // section
+    while ((pos = fileContent.find("[", pos)) != std::string::npos)
+    {
         // Check if we are entering the [Link] section
         size_t sectionEnd = fileContent.find("]", pos);
-        if (sectionEnd != std::string::npos) {
-            std::string sectionName = fileContent.substr(pos + 1, sectionEnd - pos - 1);
+        if (sectionEnd != std::string::npos)
+        {
+            std::string sectionName =
+                fileContent.substr(pos + 1, sectionEnd - pos - 1);
 
             // Check if it's the [Link] section
-            if (sectionName == "Link") {
+            if (sectionName == "Link")
+            {
                 inLinkSection = true;
-            } else {
+            }
+            else
+            {
                 inLinkSection = false;
             }
         }
 
         // If we are in the [Link] section, find and replace the MAC address
-        if (inLinkSection) {
+        if (inLinkSection)
+        {
             size_t macPos = fileContent.find(searchString, pos);
-            if (macPos != std::string::npos) {
+            if (macPos != std::string::npos)
+            {
                 size_t macEnd = fileContent.find("\n", macPos);
-                fileContent.replace(macPos + searchString.length(), macEnd - macPos - searchString.length(), newMAC);
-                break; // After replacing, exit as we only need to update the first MAC address in [Link]
+                fileContent.replace(macPos + searchString.length(),
+                                    macEnd - macPos - searchString.length(),
+                                    newMAC);
+                break; // After replacing, exit as we only need to update the
+                       // first MAC address in [Link]
             }
         }
         pos++; // Move to the next section
     }
 
-    ofs.open(
-        config::pathForIntfConf(manager.get().getBondingConfBakDir(), interface));
+    ofs.open(config::pathForIntfConf(manager.get().getBondingConfBakDir(),
+                                     interface));
     if (!ofs.is_open())
     {
         log<level::INFO>(
