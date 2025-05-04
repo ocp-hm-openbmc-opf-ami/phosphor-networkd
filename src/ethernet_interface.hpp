@@ -538,6 +538,18 @@ class EthernetInterface : public Ifaces
     friend class TestNetworkManager;
 
   private:
+    std::unique_ptr<std::thread> vlanMonitorThread;
+    
+    std::mutex vlanMutex;
+
+    std::atomic<bool> vlanMonitorActive{true};
+   
+    void startVlanMonitorThread();
+    
+    void monitorVlanInterface();
+
+    void reregisterSignals();
+   
     EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
                       stdplus::PinnedRef<Manager> manager,
                       const AllIntfInfo& info, std::string&& objPath,

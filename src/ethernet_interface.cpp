@@ -264,6 +264,10 @@ EthernetInterface::EthernetInterface(
             std::runtime_error("Missing parent link");
         }
         vlan.emplace(bus, this->objPath.c_str(), info.intf, *this);
+        if (ifIdx == 0) 
+	{  // VLAN interface not ready yet
+            startVlanMonitorThread();
+        }
     }
     dhcp4Conf.emplace(bus, this->objPath + "/dhcp4", *this, DHCPType::v4);
     dhcp6Conf.emplace(bus, this->objPath + "/dhcp6", *this, DHCPType::v6);
@@ -304,6 +308,45 @@ EthernetInterface::EthernetInterface(
     manager.get().getDNSConf().addInterfaceConf(interfaceName());
 #endif
 }
+
+void EthernetInterface::startVlanMonitorThread()
+{
+     std::lock_guard<std::mutex> lock(vlanMutex);
+     if (!vlanMonitorThread)
+     {
+          vlanMonitorThread = std::make_unique<std::thread>([this]() {
+              monitorVlanInterface();
+          });
+     }
+}
+ 
+void EthernetInterface::monitorVlanInterface()
+{
+ 
+     while (vlanMonitorActive.load() )
+     {
+         if (unsigned int newIdx = if_nametoindex(interfaceName().c_str()))
+         {
+             std::lock_guard<std::mutex> lock(vlanMutex);
+             if (vlanMonitorActive.load())
+             {  // Check flag under lock
+                 ifIdx = newIdx;
+                 reregisterSignals();
+             }
+             return;
+         }
+     }
+}
+ 
+void EthernetInterface::reregisterSignals()
+{
+    for (auto& [name, match] : signals)
+    {
+        match.reset(nullptr);
+    }
+    registerSignal(bus);
+}
+
 
 void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
 {
@@ -2527,6 +2570,14 @@ EthernetInterface::VlanProperties::VlanProperties(
 
 void EthernetInterface::VlanProperties::delete_()
 {
+    eth.get().signals.clear(); 
+    eth.get().vlanMonitorActive.store(false);
+    
+    if (eth.get().vlanMonitorThread && eth.get().vlanMonitorThread->joinable()) 
+    {
+        eth.get().vlanMonitorThread->join();
+    }
+
     auto intf = eth.get().interfaceName();
     std::string parentIfName;
 
