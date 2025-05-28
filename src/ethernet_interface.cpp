@@ -2385,6 +2385,16 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 manager,
                 config::pathForIntfConf(manager.get().getConfDir(), interface));
         });
+#else
+        manager.get().addReloadPreHook([&]() {
+            this->MacAddressIntf::macAddress(validMAC);
+            this->writeConfigurationFile();
+            // The MAC and LLADDRs will only update if the NIC is already down
+            system::setNICUp(interface, false);
+            writeUpdatedTime(
+                manager,
+                config::pathForIntfConf(manager.get().getConfDir(), interface));
+        });
 #endif
         manager.get().reloadConfigs();
     }
