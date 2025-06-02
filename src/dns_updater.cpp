@@ -244,13 +244,18 @@ void Configuration::registerSignal(sdbusplus::bus_t& bus)
                         hostConf(std::make_tuple(false, value));
                         if (ddnsIface::useMDNS())
                         {
+#if AVAHI_SUPPORT
                             execute("/bin/systemctl", "systemctl", "restart",
                                     "avahi-daemon");
                             std::this_thread::sleep_for(
                                 std::chrono::seconds(1));
                             execute("/bin/systemctl", "systemctl",
                                     "reset-failed", "avahi-daemon");
-                        }
+#else
+			    log<level::ERR>(
+			        "AVAHI Support is not enabled..\n");
+#endif                    
+		    	}
                     }
                 }
             });
@@ -674,9 +679,14 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
 
     if (ddnsIface::useMDNS())
     {
+#if AVAHI_SUPPORT
         execute("/bin/systemctl", "systemctl", "restart", "avahi-daemon");
         std::this_thread::sleep_for(std::chrono::seconds(1));
         execute("/bin/systemctl", "systemctl", "reset-failed", "avahi-daemon");
+#else
+        log<level::ERR>(
+            "AVAHI Support is not enabled..\n");
+#endif
     }
 
     return 0;
@@ -688,15 +698,16 @@ int16_t Configuration::setInterfacesConf(
     for (auto it = interfaceConf.begin(); it != interfaceConf.end(); it++)
     {
         auto [interface, doNsupdate, tsig, method] = (*it);
-#ifndef TSIG_SUPPORT
-            if(tsig == true)
-            {
+            
+	if(tsig == true)
+        {
+#if !TSIG_SUPPORT		 
 	      log<level::ERR>(
                   "TSIG support is not enabled..\n");
               elog<UnsupportedRequest>(
-                  Unsupported::REASON("TSIG support is not enabled..\n"));
-            }
+                  Unsupported::REASON("TSIG support is not enabled..\n"));        
 #endif
+	 }
         if (manager.get().interfaces.find(interface) ==
             manager.get().interfaces.end())
         {
@@ -1044,6 +1055,7 @@ void Configuration::addInterfaceConf(std::string interface)
 
 bool Configuration::useMDNS(bool value)
 {
+#if AVAHI_SUPPORT
     if (value == ddnsIface::useMDNS())
     {
         return value;
@@ -1065,6 +1077,12 @@ bool Configuration::useMDNS(bool value)
     writeConfigurationFile();
 
     return value;
+#else
+    log<level::ERR>(
+        "AVAHI Support is not enabled..\n");
+    elog<UnsupportedRequest>(
+        Unsupported::REASON("AVAHI support is not enabled..\n"));
+#endif
 }
 
 void Configuration::writeConfigurationFile()
@@ -1124,14 +1142,10 @@ void Configuration::writeConfigurationFile()
                                           : "De-Register");
             ifConf["DoNsupdate"].emplace_back(doNsupdate == true ? "true"
                                                                  : "false");
-#ifndef TSIG_SUPPORT
-            ifConf["UseTSIG"].emplace_back("false");
-            if(tsig == true )
-            {
-                lg2::error("TSIG support is not enabled...\n");
-            }
-#else
+#if TSIG_SUPPORT
             ifConf["UseTSIG"].emplace_back(tsig == true ? "true" : "false");
+#else
+            ifConf["UseTSIG"].emplace_back("false");
 #endif                                 
             if (auto names = getDomainName(interface); (int)names.size() > 0)
             {

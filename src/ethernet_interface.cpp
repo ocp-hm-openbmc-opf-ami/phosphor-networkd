@@ -304,7 +304,7 @@ EthernetInterface::EthernetInterface(
 
     signals = initSignals();
     registerSignal(bus);
-#ifdef NSUPDATE_SUPPORT
+#if NSUPDATE_SUPPORT
     manager.get().getDNSConf().addInterfaceConf(interfaceName());
 #endif
 }
@@ -2068,7 +2068,7 @@ void EthernetInterface::writeConfigurationFile()
             interfaceName());
         {
             auto& link = config.map["Link"].emplace_back();
-#ifdef PERSIST_MAC
+#if PERSIST_MAC
             auto mac = MacAddressIntf::macAddress();
             if (!mac.empty())
             {
@@ -2297,7 +2297,7 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
         lg2::error("Tried to set MAC address on VLAN");
         elog<InternalFailure>();
     }
-#ifdef PERSIST_MAC
+#if PERSIST_MAC
     stdplus::EtherAddr newMAC;
     try
     {
@@ -3045,7 +3045,7 @@ int EthernetInterface::getCreatedVLANNum(fs::path confFile)
 int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
                                                uint32_t speed)
 {
-#ifdef PHY_CONFIGURATION_SUPPORT
+#if PHY_CONFIGURATION_SUPPORT
     if (this->vlan.has_value())
     {
         log<level::ERR>(

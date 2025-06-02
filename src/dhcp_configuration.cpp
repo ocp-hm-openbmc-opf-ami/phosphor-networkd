@@ -22,7 +22,7 @@ using NotAllowed = sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed;
 using NotAllowedArgument = xyz::openbmc_project::Common::NotAllowed;
 
 constexpr auto NETWORK_Service = "xyz.openbmc_project.Network";
-#ifdef NSUPDATE_SUPPORT
+#if NSUPDATE_SUPPORT
 constexpr auto DNS_OBJ_PATH = "/xyz/openbmc_project/network/dns";
 constexpr auto DNS_INTERFACE = "xyz.openbmc_project.Network.DDNS";
 #endif
