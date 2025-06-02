@@ -24,3 +24,4 @@ option('enable-phy-configuration', type: 'boolean', description: 'Enable phy con
 option('enable-bond-feature', type: 'boolean', description: 'Enable bond feature or not')
 option('enable-nsupdate-feature', type: 'boolean', description: 'Enable nsupdate feature or not')
 option('enable-tsig-feature', type: 'boolean', description: 'Enable TSIG feature or not')
+option('enable-avahi-support', type: 'boolean', description: 'Enable avahi support or not')
