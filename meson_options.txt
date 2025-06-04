@@ -2,7 +2,7 @@ option('tests', type: 'feature', description: 'Build tests')
 
 option('uboot-env', type: 'boolean',
        description: 'Update u-boot env for MAC changes')
-option('default-link-local-autoconf', type: 'string',
+option('default-link-local-autoconf', type: 'combo', choices: ['true', 'false', 'ipv4', 'ipv6'],
        description: 'Enable link local autoconfiguration by default')
 option('default-ipv6-accept-ra', type: 'boolean',
        description: 'Accept router advertisements by default')

@@ -13,9 +13,10 @@ default_busname = 'xyz.openbmc_project.Network'
 conf_data = configuration_data()
 conf_data.set_quoted('DEFAULT_BUSNAME', default_busname)
 conf_data.set('HAVE_UBOOT_ENV', get_option('uboot-env'))
-conf_data.set_quoted(
-  'LINK_LOCAL_AUTOCONFIGURATION',
-  get_option('default-link-local-autoconf'))
+conf_data.set('IPV4_LINK_LOCAL', get_option('default-link-local-autoconf').contains('ipv4'))
+conf_data.set('IPV6_LINK_LOCAL', get_option('default-link-local-autoconf').contains('ipv6'))
+conf_data.set('IPV4_IPV6_LINK_LOCAL', get_option('default-link-local-autoconf').contains('true'))
+conf_data.set('DISABLE_LINK_LOCAL', get_option('default-link-local-autoconf').contains('false'))
 conf_data.set(
   'ENABLE_IPV6_ACCEPT_RA',
   get_option('default-ipv6-accept-ra'))

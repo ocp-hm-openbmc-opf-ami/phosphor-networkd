@@ -559,7 +559,7 @@ class EthernetInterface : public Ifaces
      *  @param[in] origin - The origin entry of the IP::Address
      *  @returns true/false value if the address is static
      */
-    bool originIsManuallyAssigned(IP::AddressOrigin origin);
+    bool originIsManuallyAssigned(IP::AddressOrigin origin, IP::Protocol family);
 
     /** @brief write the ARP Control configuration into the conf file.
      */
