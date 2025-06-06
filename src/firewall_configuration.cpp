@@ -61,13 +61,14 @@ Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
 }
 
 /** @brief Implementation for AddRule
- *  Add the rule with incoming parameters
+ *  Add the rule with incoming parameters.
  */
 int16_t Configuration::addRule(
     FirewallIface::Target target, uint8_t control,
     FirewallIface::Protocol protocol, std::string startIPAddress,
     std::string endIPAddress, uint16_t startPort, uint16_t endPort,
-    std::string macAddress, std::string startTime, std::string stopTime)
+    std::string macAddress, std::string startTime, std::string stopTime,
+    FirewallIface::IP IPver)
 {
     int16_t ret = 0;
     auto customIPv4rules = 0, customIPv6rules = 0;
@@ -122,6 +123,12 @@ int16_t Configuration::addRule(
                 startIPAddress, endIPAddress)
                 .c_str());
         return -1;
+    } // if
+
+    if (IPver != FirewallIface::IP::IPV4 && IPver != FirewallIface::IP::IPV6 &&
+        IPver != FirewallIface::IP::BOTH)
+    {
+        IPver = FirewallIface::IP::BOTH;
     } // if
 
     std::string params = fmt::format(
@@ -252,24 +259,39 @@ int16_t Configuration::addRule(
             params += " -m time --datestop " + stopTime;
     } // if
 
-    if ((control & (uint8_t)ControlBit::IP) != (uint8_t)ControlBit::IP)
+    if ((control & (uint8_t)ControlBit::IP) != (uint8_t)ControlBit::IP &&
+        IPver == FirewallIface::IP::BOTH)
     {
         ret = runSystemCommand("iptables", params);
         if (auto index = params.find("icmp"); index != std::string::npos)
             params.replace(index, 4, "icmpv6");
         ret |= runSystemCommand("ip6tables", params);
     } // if
+    else if ((((control & (uint8_t)ControlBit::IP) !=
+               (uint8_t)ControlBit::IP) &&
+              IPver == FirewallIface::IP::IPV4) ||
+             (startIPAddress.find(":") == std::string::npos &&
+              IPver == FirewallIface::IP::BOTH) ||
+             (startIPAddress.find(":") == std::string::npos &&
+              IPver == FirewallIface::IP::IPV4))
+    {
+        ret = runSystemCommand("iptables", params);
+    }
+    else if ((((control & (uint8_t)ControlBit::IP) !=
+               (uint8_t)ControlBit::IP) &&
+              IPver == FirewallIface::IP::IPV6) ||
+             (startIPAddress.find(":") != std::string::npos &&
+              IPver == FirewallIface::IP::BOTH) ||
+             (startIPAddress.find(":") != std::string::npos &&
+              IPver == FirewallIface::IP::IPV6))
+    {
+        ret = runSystemCommand("ip6tables", params);
+    }
     else
     {
-        if (startIPAddress.find(":") == std::string::npos)
-        {
-            ret = runSystemCommand("iptables", params);
-        } // if
-        else
-        {
-            ret = runSystemCommand("ip6tables", params);
-        }
-    } // else
+        log<level::ERR>("Illegal parameter\n");
+        return -1;
+    }
 
     writeConfigurationFile<in_addr>(false);
     writeConfigurationFile<in6_addr>(false);
@@ -284,7 +306,8 @@ int16_t Configuration::delRule(
     FirewallIface::Target target, uint8_t control,
     FirewallIface::Protocol protocol, std::string startIPAddress,
     std::string endIPAddress, uint16_t startPort, uint16_t endPort,
-    std::string macAddress, std::string startTime, std::string stopTime)
+    std::string macAddress, std::string startTime, std::string stopTime,
+    FirewallIface::IP IPver)
 {
     int16_t ret;
     if (control == (uint8_t)ControlBit::TIMEOUT ||
@@ -309,6 +332,12 @@ int16_t Configuration::delRule(
                 startIPAddress, endIPAddress)
                 .c_str());
         return -1;
+    } // if
+
+    if (IPver != FirewallIface::IP::IPV4 && IPver != FirewallIface::IP::IPV6 &&
+        IPver != FirewallIface::IP::BOTH)
+    {
+        IPver = FirewallIface::IP::BOTH;
     } // if
 
     std::string params = fmt::format(
@@ -438,22 +467,37 @@ int16_t Configuration::delRule(
             params += " -m time --datestop " + stopTime;
     } // if
 
-    if ((control & (uint8_t)ControlBit::IP) != (uint8_t)ControlBit::IP)
+    if ((control & (uint8_t)ControlBit::IP) != (uint8_t)ControlBit::IP &&
+        IPver == FirewallIface::IP::BOTH)
     {
         ret = runSystemCommand("iptables", params);
         ret |= runSystemCommand("ip6tables", params);
-    } // if
+    }
+    else if ((((control & (uint8_t)ControlBit::IP) !=
+               (uint8_t)ControlBit::IP) &&
+              IPver == FirewallIface::IP::IPV4) ||
+             (startIPAddress.find(":") == std::string::npos &&
+              IPver == FirewallIface::IP::BOTH) ||
+             (startIPAddress.find(":") == std::string::npos &&
+              IPver == FirewallIface::IP::IPV4))
+    {
+        ret = runSystemCommand("iptables", params);
+    }
+    else if ((((control & (uint8_t)ControlBit::IP) !=
+               (uint8_t)ControlBit::IP) &&
+              IPver == FirewallIface::IP::IPV6) ||
+             (startIPAddress.find(":") != std::string::npos &&
+              IPver == FirewallIface::IP::BOTH) ||
+             (startIPAddress.find(":") != std::string::npos &&
+              IPver == FirewallIface::IP::IPV6))
+    {
+        ret = runSystemCommand("ip6tables", params);
+    }
     else
     {
-        if (startIPAddress.find(":") == std::string::npos)
-        {
-            ret = runSystemCommand("iptables", params);
-        } // if
-        else
-        {
-            ret = runSystemCommand("ip6tables", params);
-        }
-    } // else
+        log<level::ERR>("Illegal parameter\n");
+        return -1;
+    }
 
     writeConfigurationFile<in_addr>(false);
     writeConfigurationFile<in6_addr>(false);
