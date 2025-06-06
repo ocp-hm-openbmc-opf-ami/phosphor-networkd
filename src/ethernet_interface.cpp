@@ -1151,7 +1151,7 @@ bool EthernetInterface::dhcp6(bool value)
                 .c_str());
         elog<NotAllowed>(NotAllowedArgument::REASON(
             fmt::format(
-                "Not support in current state. IPv4 of {} is not enabled.\n",
+                "Not support in current state. IPv6 of {} is not enabled.\n",
                 interfaceName())
                 .c_str()));
     }
@@ -1167,15 +1167,18 @@ bool EthernetInterface::dhcp6(bool value)
             auto size = addrs.size();
             for (int i = 0; i < size; i++)
             {
-                auto it = addrs.begin();
-                if (it != addrs.end())
-                {
-                    if (it->second->type() == IP::Protocol::IPv6 &&
+               for (auto it = addrs.begin();it != addrs.end(); it++)
+               {
+                  if (it->second->type() == IP::Protocol::IPv6 &&
                         it->second->origin() != IP::AddressOrigin::LinkLocal)
-                    {
-                        it->second->delete_();
-                    }
-                }
+                  {
+		        if(( dhcp6() && it->second->origin() == IP::AddressOrigin::Static ) || ( !dhcp6() && it->second->origin() == IP::AddressOrigin::DHCP ))
+		        {
+		           it->second->delete_();
+                           break;
+		        }
+                  }
+               }
             }
         });
 
