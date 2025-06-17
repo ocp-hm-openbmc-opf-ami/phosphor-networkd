@@ -61,7 +61,7 @@ Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
 }
 
 /** @brief Implementation for AddRule
- *  Add the rule with incoming parameters.
+ *  Add the rule with incoming parameters
  */
 int16_t Configuration::addRule(
     FirewallIface::Target target, uint8_t control,
