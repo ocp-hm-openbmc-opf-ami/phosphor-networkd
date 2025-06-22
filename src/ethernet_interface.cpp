@@ -134,8 +134,8 @@ EthernetInterface::EthernetInterface(
     stdplus::PinnedRef<sdbusplus::bus_t> bus,
     stdplus::PinnedRef<Manager> manager, const AllIntfInfo& info,
     std::string&& objPath, const config::Parser& config, bool enabled) :
-    Ifaces(bus, objPath.c_str(), Ifaces::action::defer_emit),
-    manager(manager), bus(bus), objPath(std::move(objPath))
+    Ifaces(bus, objPath.c_str(), Ifaces::action::defer_emit), manager(manager),
+    bus(bus), objPath(std::move(objPath))
 {
     interfaceName(*info.intf.name, true);
     auto dhcpVal = getDHCPValue(config);
@@ -264,8 +264,8 @@ EthernetInterface::EthernetInterface(
             std::runtime_error("Missing parent link");
         }
         vlan.emplace(bus, this->objPath.c_str(), info.intf, *this);
-        if (ifIdx == 0) 
-	{  // VLAN interface not ready yet
+        if (ifIdx == 0)
+        { // VLAN interface not ready yet
             startVlanMonitorThread();
         }
     }
@@ -311,33 +311,31 @@ EthernetInterface::EthernetInterface(
 
 void EthernetInterface::startVlanMonitorThread()
 {
-     std::lock_guard<std::mutex> lock(vlanMutex);
-     if (!vlanMonitorThread)
-     {
-          vlanMonitorThread = std::make_unique<std::thread>([this]() {
-              monitorVlanInterface();
-          });
-     }
+    std::lock_guard<std::mutex> lock(vlanMutex);
+    if (!vlanMonitorThread)
+    {
+        vlanMonitorThread =
+            std::make_unique<std::thread>([this]() { monitorVlanInterface(); });
+    }
 }
- 
+
 void EthernetInterface::monitorVlanInterface()
 {
- 
-     while (vlanMonitorActive.load() )
-     {
-         if (unsigned int newIdx = if_nametoindex(interfaceName().c_str()))
-         {
-             std::lock_guard<std::mutex> lock(vlanMutex);
-             if (vlanMonitorActive.load())
-             {  // Check flag under lock
-                 ifIdx = newIdx;
-                 reregisterSignals();
-             }
-             return;
-         }
-     }
+    while (vlanMonitorActive.load())
+    {
+        if (unsigned int newIdx = if_nametoindex(interfaceName().c_str()))
+        {
+            std::lock_guard<std::mutex> lock(vlanMutex);
+            if (vlanMonitorActive.load())
+            { // Check flag under lock
+                ifIdx = newIdx;
+                reregisterSignals();
+            }
+            return;
+        }
+    }
 }
- 
+
 void EthernetInterface::reregisterSignals()
 {
     for (auto& [name, match] : signals)
@@ -346,7 +344,6 @@ void EthernetInterface::reregisterSignals()
     }
     registerSignal(bus);
 }
-
 
 void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
 {
@@ -950,8 +947,8 @@ void EthernetInterface::delIpIdx(std::string address, IP::Protocol protocolType)
                 ipv4IndexUsedList.at(i) = std::nullopt;
                 break;
             } // if
-        }     // for
-    }         // if
+        } // for
+    } // if
     else if (protocolType == IP::Protocol::IPv6)
     {
         for (int i = 0; i < IPV6_MAX_NUM; i++)
@@ -961,7 +958,7 @@ void EthernetInterface::delIpIdx(std::string address, IP::Protocol protocolType)
                 ipv6IndexUsedList.at(i) = std::nullopt;
                 break;
             } // if
-        }     // for
+        } // for
     }
 }
 
@@ -1135,18 +1132,21 @@ bool EthernetInterface::dhcp6(bool value)
             auto size = addrs.size();
             for (int i = 0; i < size; i++)
             {
-               for (auto it = addrs.begin();it != addrs.end(); it++)
-               {
-                  if (it->second->type() == IP::Protocol::IPv6 &&
+                for (auto it = addrs.begin(); it != addrs.end(); it++)
+                {
+                    if (it->second->type() == IP::Protocol::IPv6 &&
                         it->second->origin() != IP::AddressOrigin::LinkLocal)
-                  {
-		        if(( dhcp6() && it->second->origin() == IP::AddressOrigin::Static ) || ( !dhcp6() && it->second->origin() == IP::AddressOrigin::DHCP ))
-		        {
-		           it->second->delete_();
-                           break;
-		        }
-                  }
-               }
+                    {
+                        if ((dhcp6() && it->second->origin() ==
+                                            IP::AddressOrigin::Static) ||
+                            (!dhcp6() &&
+                             it->second->origin() == IP::AddressOrigin::DHCP))
+                        {
+                            it->second->delete_();
+                            break;
+                        }
+                    }
+                }
             }
         });
 
@@ -1359,8 +1359,16 @@ ServerList EthernetInterface::staticNameServers(ServerList value)
 
 void EthernetInterface::loadNTPServers(const config::Parser& config)
 {
-    EthernetInterfaceIntf::ntpServers(getNTPServerFromTimeSyncd());
-    EthernetInterfaceIntf::staticNTPServers({"in.pool.ntp.org"});
+    ServerList servers = getNTPServerFromTimeSyncd();
+    EthernetInterfaceIntf::ntpServers(servers);
+    if (!servers.empty())
+    {
+        EthernetInterfaceIntf::staticNTPServers(servers);
+    }
+    else
+    {
+        EthernetInterfaceIntf::staticNTPServers({"in.pool.ntp.org"});
+    }
 }
 
 void EthernetInterface::loadNameServers(const config::Parser& config)
@@ -1785,8 +1793,8 @@ void EthernetInterface::writeIfaceStateFile(std::string ifname)
                             it->second->ipv6IndexUsedList.at(i).value(), i));
                     }
                 } // for
-            }     // if
-        }         // if
+            } // if
+        } // if
     }
     {
         if (!it->second->autoNeg())
@@ -1799,108 +1807,122 @@ void EthernetInterface::writeIfaceStateFile(std::string ifname)
         }
     }
 #if AMI_NCSI_SUPPORT
-    {{if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
-              std::string::npos &&
-          EthernetInterface::ncsiConfig.has_value()){
-        auto& ncsi = IfaceState.map["NCSI"].emplace_back();
-    ncsi["Mode"].emplace_back(
-        EthernetInterface::ncsiConfig.value().mode() == NCSIIface::Mode::Auto
-            ? "Auto"
-            : "Manual");
-    ncsi["Package"].emplace_back(
-        std::to_string(EthernetInterface::ncsiConfig.value().package()));
-    ncsi["Channel"].emplace_back(
-        std::to_string(EthernetInterface::ncsiConfig.value().channel()));
-}
-}
-}
+    {
+        {
+            if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
+                    std::string::npos &&
+                EthernetInterface::ncsiConfig.has_value())
+            {
+                auto& ncsi = IfaceState.map["NCSI"].emplace_back();
+                ncsi["Mode"].emplace_back(
+                    EthernetInterface::ncsiConfig.value().mode() ==
+                            NCSIIface::Mode::Auto
+                        ? "Auto"
+                        : "Manual");
+                ncsi["Package"].emplace_back(std::to_string(
+                    EthernetInterface::ncsiConfig.value().package()));
+                ncsi["Channel"].emplace_back(std::to_string(
+                    EthernetInterface::ncsiConfig.value().channel()));
+            }
+        }
+    }
 #endif
-{
-    std::vector<uint8_t> value = EthernetInterfaceIntf::dhcpv6TimingConfParam();
-    if (!value.empty())
     {
-        auto it = value.begin();
+        std::vector<uint8_t> value =
+            EthernetInterfaceIntf::dhcpv6TimingConfParam();
+        if (!value.empty())
+        {
+            auto it = value.begin();
 
-        auto& dhcp6TimingConf =
-            IfaceState.map["DHCPv6TimingConf"].emplace_back();
+            auto& dhcp6TimingConf =
+                IfaceState.map["DHCPv6TimingConf"].emplace_back();
 
-        dhcp6TimingConf["SOLMaxDelay"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["SOLMaxDelay"].emplace_back(
+                fmt::format("{}", *it++));
 
-        dhcp6TimingConf["SOLTimeout"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["SOLTimeout"].emplace_back(
+                fmt::format("{}", *it++));
 
-        dhcp6TimingConf["SOLMaxRt"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["SOLMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-        dhcp6TimingConf["REQTimeout"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["REQTimeout"].emplace_back(
+                fmt::format("{}", *it++));
 
-        dhcp6TimingConf["REQMaxRt"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["REQMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-        dhcp6TimingConf["REQMaxRc"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["REQMaxRc"].emplace_back(fmt::format("{}", *it++));
 
-        dhcp6TimingConf["RENTimeout"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["RENTimeout"].emplace_back(
+                fmt::format("{}", *it++));
 
-        dhcp6TimingConf["RENMaxRt"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["RENMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-        dhcp6TimingConf["REBTimeout"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["REBTimeout"].emplace_back(
+                fmt::format("{}", *it++));
 
-        dhcp6TimingConf["REBMaxRt"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["REBMaxRt"].emplace_back(fmt::format("{}", *it++));
 
-        dhcp6TimingConf["INFTimeout"].emplace_back(fmt::format("{}", *it++));
+            dhcp6TimingConf["INFTimeout"].emplace_back(
+                fmt::format("{}", *it++));
 
-        dhcp6TimingConf["INFMaxRt"].emplace_back(fmt::format("{}", *it));
+            dhcp6TimingConf["INFMaxRt"].emplace_back(fmt::format("{}", *it));
+        }
     }
-}
 
-{
-    std::vector<uint8_t> value =
-        EthernetInterfaceIntf::ipv6SLAACTimingConfParam();
-    if (!value.empty())
     {
-        auto it = value.begin();
+        std::vector<uint8_t> value =
+            EthernetInterfaceIntf::ipv6SLAACTimingConfParam();
+        if (!value.empty())
+        {
+            auto it = value.begin();
 
-        auto& slaacTimingConf =
-            IfaceState.map["SLAACTimingConf"].emplace_back();
+            auto& slaacTimingConf =
+                IfaceState.map["SLAACTimingConf"].emplace_back();
 
-        slaacTimingConf["MaxRtrSolicitationDelay"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["MaxRtrSolicitationDelay"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["RtrSolicitationInterval"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["RtrSolicitationInterval"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["MaxRtrSolicitations"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["MaxRtrSolicitations"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["DupAddrDetectTransmits"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["DupAddrDetectTransmits"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["MaxMulticastSolicit"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["MaxMulticastSolicit"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["MaxUnicastSolicit"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["MaxUnicastSolicit"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["MaxAnycastDelayTime"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["MaxAnycastDelayTime"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["MaxNeighborAdvertisement"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["MaxNeighborAdvertisement"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["ReachableTime"].emplace_back(fmt::format("{}", *it++));
+            slaacTimingConf["ReachableTime"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["RetransTimer"].emplace_back(fmt::format("{}", *it++));
+            slaacTimingConf["RetransTimer"].emplace_back(
+                fmt::format("{}", *it++));
 
-        slaacTimingConf["DelayFirstProbeTime"].emplace_back(
-            fmt::format("{}", *it++));
+            slaacTimingConf["DelayFirstProbeTime"].emplace_back(
+                fmt::format("{}", *it++));
+        }
     }
-}
 
-IfaceState.writeFile(fs::path{
-    fmt::format("{}/{}", manager.get().ifaceConfDir.generic_string(), ifname)
-        .c_str()});
-lg2::info("Wrote networkd file: {CFG_FILE}", "CFG_FILE",
-          fs::path{
-              fmt::format("{}/{}", manager.get().ifaceConfDir.generic_string(),
-                          ifname)
-                  .c_str()});
+    IfaceState.writeFile(fs::path{
+        fmt::format("{}/{}", manager.get().ifaceConfDir.generic_string(),
+                    ifname)
+            .c_str()});
+    lg2::info("Wrote networkd file: {CFG_FILE}", "CFG_FILE",
+              fs::path{fmt::format("{}/{}",
+                                   manager.get().ifaceConfDir.generic_string(),
+                                   ifname)
+                           .c_str()});
 }
 
 ServerList EthernetInterface::ntpServers(ServerList /*servers*/)
@@ -2583,10 +2605,10 @@ EthernetInterface::VlanProperties::VlanProperties(
 
 void EthernetInterface::VlanProperties::delete_()
 {
-    eth.get().signals.clear(); 
+    eth.get().signals.clear();
     eth.get().vlanMonitorActive.store(false);
-    
-    if (eth.get().vlanMonitorThread && eth.get().vlanMonitorThread->joinable()) 
+
+    if (eth.get().vlanMonitorThread && eth.get().vlanMonitorThread->joinable())
     {
         eth.get().vlanMonitorThread->join();
     }
@@ -3357,7 +3379,7 @@ int EthernetInterface::getProperIpIdx(
                 idx = i;
                 break;
             } // if
-        }     // for
+        } // for
 
         if (idx == 0 && minIdx == 0)
         {
