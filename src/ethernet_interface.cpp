@@ -369,7 +369,13 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     }
     else if (info.mac)
     {
-        MacAddressIntf::macAddress(stdplus::toStr(*info.mac), skipSignal);
+        if (stdplus::toStr(*info.mac) != MacAddressIntf::macAddress() && manager.get().initCompleted)
+        {
+            MacAddressIntf::macAddress(stdplus::toStr(*info.mac), skipSignal);
+            manager.get().reconfigLink(ifIdx);
+        }
+        else
+            MacAddressIntf::macAddress(stdplus::toStr(*info.mac), skipSignal);
     }
     if (info.mtu)
     {
@@ -3592,7 +3598,6 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                             if ((std::get<std::string>(t.second) == "online") &&
                                 (interfaceName() != "hostusb0"))
                             {
-                                manager.get().reconfigLink(ifIdx);
 #ifdef AMI_NCSI_SUPPORT
                                 if (std::string{DEFAULT_NCSI_INTERFACE}.find(
                                         interfaceName()) != std::string::npos)
