@@ -84,6 +84,7 @@ class Configuration : Iface
      *  @param[in] macAddress -
      *  @param[in] startTime -
      *  @param[in] stop -
+     *  @param[in] IPver -
      *
      *  @return result[int16_t] -
      */
@@ -91,7 +92,7 @@ class Configuration : Iface
                     std::string startIPAddress, std::string endIPAddress,
                     uint16_t startPort, uint16_t endPort,
                     std::string macAddress, std::string startTime,
-                    std::string stop) override;
+                    std::string stop, IP IPver) override;
     /** @brief Implementation for DelRule
      *  Delete the rule with incoming parameters
      *
@@ -105,6 +106,7 @@ class Configuration : Iface
      *  @param[in] macAddress -
      *  @param[in] startTime -
      *  @param[in] stop -
+     *  @param[in] IPver -
      *
      *  @return result[int16_t] -
      */
@@ -112,7 +114,7 @@ class Configuration : Iface
                     std::string startIPAddress, std::string endIPAddress,
                     uint16_t startPort, uint16_t endPort,
                     std::string macAddress, std::string startTime,
-                    std::string stop) override;
+                    std::string stop, IP IPver) override;
     /** @brief Implementation for FlushAll
      *  Delete all the rules according to IPv4, IPv6 or both
      *

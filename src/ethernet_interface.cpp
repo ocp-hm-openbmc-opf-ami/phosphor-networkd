@@ -406,17 +406,49 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     getChannelPrivilege(*info.name);
 }
 
-bool EthernetInterface::originIsManuallyAssigned(IP::AddressOrigin origin)
+bool EthernetInterface::originIsManuallyAssigned(IP::AddressOrigin origin, IP::Protocol family)
 {
-    return (
-#ifdef LINK_LOCAL_AUTOCONFIGURATION
+
+    bool status = false;
+
+    if (family == IP::Protocol::IPv4)
+    {
+        status =
+#ifdef IPV4_LINK_LOCAL
         (origin == IP::AddressOrigin::Static)
-#else
+#endif
+#ifdef IPV6_LINK_LOCAL
         (origin == IP::AddressOrigin::Static ||
          origin == IP::AddressOrigin::LinkLocal)
 #endif
 
-    );
+#ifdef IPV4_IPV6_LINK_LOCAL
+        (origin == IP::AddressOrigin::Static)
+#endif
+#ifdef DISABLE_LINK_LOCAL
+        (origin == IP::AddressOrigin::Static ||
+         origin == IP::AddressOrigin::LinkLocal)
+#endif
+    ;}
+    else
+    {
+        status =
+#ifdef IPV4_LINK_LOCAL
+        (origin == IP::AddressOrigin::Static ||
+         origin == IP::AddressOrigin::LinkLocal)
+#endif
+#ifdef IPV6_LINK_LOCAL
+        (origin == IP::AddressOrigin::Static)
+#endif
+#ifdef IPV4_IPV6_LINK_LOCAL
+        (origin == IP::AddressOrigin::Static)
+#endif
+#ifdef DISABLE_LINK_LOCAL
+        (origin == IP::AddressOrigin::Static ||
+         origin == IP::AddressOrigin::LinkLocal)
+#endif
+    ;}
+    return status;
 }
 
 void EthernetInterface::addAddr(const AddressInfo& info)
@@ -427,7 +459,7 @@ void EthernetInterface::addAddr(const AddressInfo& info)
         origin = IP::AddressOrigin::DHCP;
     }
 
-#ifdef LINK_LOCAL_AUTOCONFIGURATION
+#if defined(IPV4_LINK_LOCAL) || defined(IPV6_LINK_LOCAL) || defined(IPV4_IPV6_LINK_LOCAL)
     if (info.scope == RT_SCOPE_LINK)
     {
         origin = IP::AddressOrigin::LinkLocal;
@@ -2115,26 +2147,17 @@ void EthernetInterface::writeConfigurationFile()
             auto& network = config.map["Network"].emplace_back();
             {
                 auto& lla = network["LinkLocalAddressing"];
-#ifdef LINK_LOCAL_AUTOCONFIGURATION
-                switch (EthernetInterfaceIntf::linkLocalAutoConf())
-                {
-                    case EthernetInterface::LinkLocalConf::v4:
-                        lla.emplace_back("ipv4");
-                        break;
-                    case EthernetInterface::LinkLocalConf::none:
-                        lla.emplace_back("no");
-                        break;
-                    case EthernetInterface::LinkLocalConf::v6:
-                    case EthernetInterface::LinkLocalConf::both:
-                    default:
-                        if (std::string{LINK_LOCAL_AUTOCONFIGURATION} == "ipv6")
-                            lla.emplace_back("ipv6");
-                        else
-                            lla.emplace_back("yes");
-                        break;
-                }
-#else
-                lla.emplace_back("no");
+#ifdef IPV4_LINK_LOCAL
+                lla.emplace_back("ipv4");
+#endif
+#ifdef IPV6_LINK_LOCAL
+                lla.emplace_back("ipv6");
+#endif
+#ifdef IPV4_IPV6_LINK_LOCAL
+                lla.emplace_back("true");
+#endif
+#ifdef DISABLE_LINK_LOCAL
+                lla.emplace_back("false");
 #endif
             }
 
@@ -2194,7 +2217,7 @@ void EthernetInterface::writeConfigurationFile()
                          !dhcp4() && EthernetInterfaceIntf::ipv4Enable()))
                     {
                         {
-                            if (originIsManuallyAssigned(addr.second->origin()))
+                            if (originIsManuallyAssigned(addr.second->origin(), addr.second->type()))
                             {
                                 address.emplace_back(
                                     fmt::format("{}/{}", addr.second->address(),
