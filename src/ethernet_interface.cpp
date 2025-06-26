@@ -3688,12 +3688,6 @@ std::string EthernetInterface::dhcpv6DUID() const
         std::string res = "";
         std::string filename = "/var/run/systemd/netif/links/";
         std::string delim = "DHCP6_CLIENT_DUID=DUID-LL:";
-        int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-        if (sockfd < 0)
-        {
-            lg2::error("Failure to create socket");
-            elog<InternalFailure>();
-        }
 
         filename += std::to_string(ifIdx);
         std::ifstream infile;
