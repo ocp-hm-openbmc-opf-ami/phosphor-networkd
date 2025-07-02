@@ -717,7 +717,7 @@ void Configuration::restoreConfigurationFile()
                     .c_str()))
             (void)runSystemCommand(
                 "ip6tables-restore",
-                fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR,
+                fmt::format("--noflush {}/{}", CUSTOM_IPTABLES_DIR,
                             IP6TABLES_RULES)
                     .c_str());
     } // if
@@ -728,7 +728,7 @@ void Configuration::restoreConfigurationFile()
                     .c_str()))
             (void)runSystemCommand(
                 "iptables-restore",
-                fmt::format("--noflush < {}/{}", CUSTOM_IPTABLES_DIR,
+                fmt::format("--noflush {}/{}", CUSTOM_IPTABLES_DIR,
                             IPTABLES_RULES)
                     .c_str());
     } // else
