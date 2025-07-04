@@ -73,7 +73,7 @@ static constexpr const char* defaultChannelPriv = "priv-admin";
 constexpr auto garpControlService = "xyz.openbmc_project.GARPControl.service";
 constexpr auto sysctlConfigPrefix = "/proc/sys/net/ipv4/conf/";
 constexpr auto sysctlConfigSurffix = "/arp_ignore";
-std::string arpResponseDisable = "echo 2 >";
+std::string arpResponseDisable = "echo 8 >";
 std::string arpResponseEnable = "echo 0 >";
 
 constexpr auto VLAN_MAX_NUM = 2;
