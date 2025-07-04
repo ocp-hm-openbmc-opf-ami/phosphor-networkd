@@ -2,6 +2,7 @@
 Description=Phosphor GARP Control
 After=systemd-networkd.service xyz.openbmc_project.Network.service
 [Service]
+ExecCondition=/bin/sh -c '/usr/bin/grep "GARP" /etc/arpcontrol/* -A 1 | /usr/bin/grep -q "Enabled=true" && exit 0 || exit 1'
 ExecStart=/usr/bin/env phosphor-garpcontrol
 SyslogIdentifier=phosphor-garpcontrol
 
