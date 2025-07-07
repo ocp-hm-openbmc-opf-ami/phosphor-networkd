@@ -3064,6 +3064,12 @@ void EthernetInterface::writeConfiguration()
     ARPResp["Enabled"].emplace_back(
         (ARPControlIface::arpResponse()) ? "true" : "false");
     config.writeFile(confPath.string());
+
+    manager.get().addReloadPostHook([](){
+        execute("/bin/systemctl", "systemctl", "restart", garpControlService);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        execute("/bin/systemctl", "systemctl","reset-failed", garpControlService);
+    });
 }
 
 /** @brief set the ARP Response status in sysctl config for the ethernet
