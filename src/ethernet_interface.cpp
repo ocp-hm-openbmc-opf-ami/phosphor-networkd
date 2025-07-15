@@ -3160,6 +3160,19 @@ int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
 #endif
 }
 
+bool EthernetInterface::linkUp() const
+{
+    bool linkUp{};
+    linkUp = EthernetInterfaceIntf::linkUp();
+
+#ifdef AMI_NCSI_SUPPORT
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) != std::string::npos)
+        linkUp = phosphor::network::ncsi::getLinkStatus(ifIdx);
+#endif
+
+    return linkUp;
+}
+
 uint32_t EthernetInterface::speed() const
 {
     auto ethInfo = ignoreError("GetEthInfo", this->interfaceName(), {}, [&] {
@@ -3620,27 +3633,6 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                                         break;
                                     }
                                 }
-                            }
-                        }
-                        else if (t.first == "OnlineState" &&
-                                 manager.get().initCompleted)
-                        {
-                            if ((std::get<std::string>(t.second) == "online") &&
-                                (interfaceName() != "hostusb0"))
-                            {
-#ifdef AMI_NCSI_SUPPORT
-                                if (std::string{DEFAULT_NCSI_INTERFACE}.find(
-                                        interfaceName()) != std::string::npos)
-                                {
-                                    auto v =
-                                        phosphor::network::ncsi::getLinkStatus(
-                                            ifIdx);
-                                    EthernetInterfaceIntf::linkUp(
-                                        phosphor::network::ncsi::getLinkStatus(
-                                            ifIdx),
-                                        true);
-                                }
-#endif
                             }
                         }
                     }

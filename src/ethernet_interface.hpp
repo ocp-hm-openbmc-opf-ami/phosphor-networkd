@@ -275,6 +275,9 @@ class EthernetInterface : public Ifaces
         return std::visit([&](auto v) { return dhcpIsEnabled(v); }, addr);
     }
 
+    /** Get linkup status */
+    bool linkUp() const override;
+
     /** Set size of MTU */
     size_t mtu(size_t value) override;
 
