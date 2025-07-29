@@ -569,7 +569,7 @@ std::vector<IPTableElementTuple> Configuration::getRules(FirewallIface::IP ip)
                     break;
                 std::vector<std::string> vec = splitStr(line, " ");
                 IPTableElementTuple element;
-                std::get<3>(element) = FirewallIface::Protocol::UNSPECIFIED;
+                std::get<3>(element) = FirewallIface::Protocol::ALL;
                 for (int i = 0; i < vec.size(); i++)
                 {
                     if (vec.at(i) == "--comment")
