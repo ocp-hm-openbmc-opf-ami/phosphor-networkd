@@ -9,9 +9,11 @@ project(
   ])
 
 default_busname = 'xyz.openbmc_project.Network'
+static_ntp_server = 'in.pool.ntp.org'
 
 conf_data = configuration_data()
 conf_data.set_quoted('DEFAULT_BUSNAME', default_busname)
+conf_data.set_quoted('STATIC_NTP_SERVER', static_ntp_server)
 conf_data.set('HAVE_UBOOT_ENV', get_option('uboot-env'))
 conf_data.set('IPV4_LINK_LOCAL', get_option('default-link-local-autoconf').contains('ipv4'))
 conf_data.set('IPV6_LINK_LOCAL', get_option('default-link-local-autoconf').contains('ipv6'))
