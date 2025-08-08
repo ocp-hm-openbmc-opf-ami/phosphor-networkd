@@ -80,6 +80,7 @@ if (conf_data.get('ENABLE_BOND_SUPPORT') == true)
     'config_parser.cpp',
     'dhcp_configuration.cpp',
     'dns_updater.cpp',
+    'host_interface.cpp',
     'bond.cpp',
     implicit_include_directories: false,
     include_directories: src_includes,
@@ -105,6 +106,7 @@ else
     'config_parser.cpp',
     'dhcp_configuration.cpp',
     'dns_updater.cpp',
+    'host_interface.cpp',
     implicit_include_directories: false,
     include_directories: src_includes,
     dependencies: networkd_deps)

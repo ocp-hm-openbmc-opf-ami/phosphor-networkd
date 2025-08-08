@@ -354,6 +354,17 @@ void Manager::addInterface(const InterfaceInfo& info)
         ignoredIntf.emplace(info.idx);
         return;
     }
+
+    if(hostIntf == nullptr)
+    {
+        if(info.name.value() == "hostusb0")
+        {
+            hostIntf = std::make_unique<phosphor::network::
+			        hostintf::HostInterface>(bus,(this->objPath / "hostusb0").str,info);
+            return;
+        }
+    }
+
     if (info.name)
     {
         const auto& ignored = internal::getIgnoredInterfaces();
@@ -390,6 +401,17 @@ void Manager::addInterface(const InterfaceInfo& info)
 
 void Manager::removeInterface(const InterfaceInfo& info)
 {
+    if(hostIntf != nullptr)
+    {
+        if(hostIntf->getifindex() == info.idx)
+        {
+            hostIntf->delete_();
+            hostIntf.reset();
+            hostIntf = nullptr;
+            return;
+        }
+    }
+
     auto iit = interfacesByIdx.find(info.idx);
     auto nit = interfaces.end();
     if (info.name)
@@ -435,6 +457,16 @@ void Manager::addAddress(const AddressInfo& info)
     {
         return;
     }
+
+    if(hostIntf != nullptr)
+    {
+        if(hostIntf->getifindex() == info.ifidx)
+        {
+            hostIntf->addAddr(info);
+            return;
+        }
+    }
+
     if (auto it = intfInfo.find(info.ifidx); it != intfInfo.end())
     {
         it->second.addrs.insert_or_assign(info.ifaddr, info);
@@ -453,6 +485,15 @@ void Manager::addAddress(const AddressInfo& info)
 
 void Manager::removeAddress(const AddressInfo& info)
 {
+    if(hostIntf != nullptr)
+    {
+        if(hostIntf->getifindex() == info.ifidx)
+        {
+            hostIntf->removeAddr(info);
+            return;
+        }
+    }
+
     if (auto it = interfacesByIdx.find(info.ifidx); it != interfacesByIdx.end())
     {
         it->second->addrs.erase(info.ifaddr);
@@ -470,6 +511,15 @@ void Manager::addNeighbor(const NeighborInfo& info)
     {
         return;
     }
+
+    if(hostIntf != nullptr)
+    {
+        if(hostIntf->getifindex() == info.ifidx)
+        {
+            return;
+        }
+    }
+
     if (auto it = intfInfo.find(info.ifidx); it != intfInfo.end())
     {
         it->second.staticNeighs.insert_or_assign(*info.addr, info);
@@ -492,6 +542,15 @@ void Manager::removeNeighbor(const NeighborInfo& info)
     {
         return;
     }
+
+    if(hostIntf != nullptr)
+    {
+        if(hostIntf->getifindex() == info.ifidx)
+        {
+            return;
+        }
+    }
+
     if (auto it = intfInfo.find(info.ifidx); it != intfInfo.end())
     {
         it->second.staticNeighs.erase(*info.addr);
@@ -505,6 +564,14 @@ void Manager::removeNeighbor(const NeighborInfo& info)
 
 void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
 {
+    if(hostIntf != nullptr)
+    {
+        if(hostIntf->getifindex() == ifidx)
+        {
+            return;
+        }
+    }
+
     if (auto it = intfInfo.find(ifidx); it != intfInfo.end())
     {
         std::visit(
@@ -589,6 +656,14 @@ void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
 
 void Manager::removeDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
 {
+    if(hostIntf != nullptr)
+    {
+        if(hostIntf->getifindex() == ifidx)
+        {
+            return;
+        }
+    }
+
     if (auto it = intfInfo.find(ifidx); it != intfInfo.end())
     {
         std::visit(
