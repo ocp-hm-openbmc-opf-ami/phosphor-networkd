@@ -90,6 +90,7 @@ constexpr char HOSTNAMED_OBJ[] = "/org/freedesktop/hostname1";
 constexpr char HOSTNAMED_INTF[] = "org.freedesktop.hostname1";
 
 constexpr auto DEFAULT_HOSTNAME_PATH = "/etc/hostname_default";
+constexpr auto CURRENT_MAC_PATH = "/sys/class/net/eth0/address";
 constexpr auto GET = "Get";
 constexpr auto DNS_CONF_DIR = "/etc/dns.d";
 constexpr auto DNS_CONF = "/etc/dns.d/dns.conf";
@@ -617,6 +618,7 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
 {
     bool different = false;
     std::string hostname;
+    std::string hw_mac;
     const char invalidChar[] = "{}()<>&*`|=?;[]$#~!\"%/\\:+,'.";
     if (hostSetting)
     {
@@ -628,8 +630,23 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
         }
         else
         {
-            std::getline(inStream, hostname);
-            inStream.close();
+	    std::getline(inStream, hostname);
+            std::fstream inStream(CURRENT_MAC_PATH, std::fstream::in);
+            if (!inStream.is_open())
+            {
+                lg2::error("Unable to open the input file.");
+                inStream.close();
+                return -1;
+            }
+            else
+            {
+                std::getline(inStream, hw_mac);
+                hw_mac.erase(std::remove(hw_mac.begin(), hw_mac.end(), ':'), hw_mac.end());
+                hostname =  "AMIOT-" + hw_mac;
+                std::string cmd = "hostnamectl set-hostname " + hostname;
+                int result = std::system(cmd.c_str());
+                inStream.close();
+            }
         }
 
         different = true;

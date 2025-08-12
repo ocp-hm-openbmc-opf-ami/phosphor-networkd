@@ -369,7 +369,8 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     }
     else if (info.mac)
     {
-        if (stdplus::toStr(*info.mac) != MacAddressIntf::macAddress() && manager.get().initCompleted)
+        if (stdplus::toStr(*info.mac) != MacAddressIntf::macAddress() &&
+            manager.get().initCompleted)
         {
             MacAddressIntf::macAddress(stdplus::toStr(*info.mac), skipSignal);
             manager.get().reconfigLink(ifIdx);
@@ -406,48 +407,50 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     getChannelPrivilege(*info.name);
 }
 
-bool EthernetInterface::originIsManuallyAssigned(IP::AddressOrigin origin, IP::Protocol family)
+bool EthernetInterface::originIsManuallyAssigned(IP::AddressOrigin origin,
+                                                 IP::Protocol family)
 {
-
     bool status = false;
 
     if (family == IP::Protocol::IPv4)
     {
         status =
 #ifdef IPV4_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static)
+            (origin == IP::AddressOrigin::Static)
 #endif
 #ifdef IPV6_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static ||
-         origin == IP::AddressOrigin::LinkLocal)
+                (origin == IP::AddressOrigin::Static ||
+                 origin == IP::AddressOrigin::LinkLocal)
 #endif
 
 #ifdef IPV4_IPV6_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static)
+                    (origin == IP::AddressOrigin::Static)
 #endif
 #ifdef DISABLE_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static ||
-         origin == IP::AddressOrigin::LinkLocal)
+                        (origin == IP::AddressOrigin::Static ||
+                         origin == IP::AddressOrigin::LinkLocal)
 #endif
-    ;}
+            ;
+    }
     else
     {
         status =
 #ifdef IPV4_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static ||
-         origin == IP::AddressOrigin::LinkLocal)
+            (origin == IP::AddressOrigin::Static ||
+             origin == IP::AddressOrigin::LinkLocal)
 #endif
 #ifdef IPV6_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static)
+                (origin == IP::AddressOrigin::Static)
 #endif
 #ifdef IPV4_IPV6_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static)
+                    (origin == IP::AddressOrigin::Static)
 #endif
 #ifdef DISABLE_LINK_LOCAL
-        (origin == IP::AddressOrigin::Static ||
-         origin == IP::AddressOrigin::LinkLocal)
+                        (origin == IP::AddressOrigin::Static ||
+                         origin == IP::AddressOrigin::LinkLocal)
 #endif
-    ;}
+            ;
+    }
     return status;
 }
 
@@ -459,7 +462,8 @@ void EthernetInterface::addAddr(const AddressInfo& info)
         origin = IP::AddressOrigin::DHCP;
     }
 
-#if defined(IPV4_LINK_LOCAL) || defined(IPV6_LINK_LOCAL) || defined(IPV4_IPV6_LINK_LOCAL)
+#if defined(IPV4_LINK_LOCAL) || defined(IPV6_LINK_LOCAL) ||                    \
+    defined(IPV4_IPV6_LINK_LOCAL)
     if (info.scope == RT_SCOPE_LINK)
     {
         origin = IP::AddressOrigin::LinkLocal;
@@ -1405,7 +1409,7 @@ void EthernetInterface::loadNTPServers(const config::Parser& config)
     }
     else
     {
-        EthernetInterfaceIntf::staticNTPServers({"in.pool.ntp.org"});
+        EthernetInterfaceIntf::staticNTPServers({STATIC_NTP_SERVER});
     }
 }
 
@@ -2217,7 +2221,8 @@ void EthernetInterface::writeConfigurationFile()
                          !dhcp4() && EthernetInterfaceIntf::ipv4Enable()))
                     {
                         {
-                            if (originIsManuallyAssigned(addr.second->origin(), addr.second->type()))
+                            if (originIsManuallyAssigned(addr.second->origin(),
+                                                         addr.second->type()))
                             {
                                 address.emplace_back(
                                     fmt::format("{}/{}", addr.second->address(),
@@ -2441,7 +2446,7 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
         });
 #else
         manager.get().addReloadPreHook([this, validMAC, interface,
-                                        manager = manager]() { 
+                                        manager = manager]() {
             this->MacAddressIntf::macAddress(validMAC);
             this->writeConfigurationFile();
             // The MAC and LLADDRs will only update if the NIC is already down
@@ -3065,10 +3070,11 @@ void EthernetInterface::writeConfiguration()
         (ARPControlIface::arpResponse()) ? "true" : "false");
     config.writeFile(confPath.string());
 
-    manager.get().addReloadPostHook([](){
+    manager.get().addReloadPostHook([]() {
         execute("/bin/systemctl", "systemctl", "restart", garpControlService);
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        execute("/bin/systemctl", "systemctl","reset-failed", garpControlService);
+        execute("/bin/systemctl", "systemctl", "reset-failed",
+                garpControlService);
     });
 }
 
@@ -3158,6 +3164,20 @@ int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
     elog<UnsupportedRequest>(
         Unsupported::REASON("PHY Configuration feature is not enabled..\n"));
 #endif
+}
+
+bool EthernetInterface::linkUp() const
+{
+    bool linkUp{};
+    linkUp = EthernetInterfaceIntf::linkUp();
+
+#ifdef AMI_NCSI_SUPPORT
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
+        std::string::npos)
+        linkUp = phosphor::network::ncsi::getLinkStatus(ifIdx);
+#endif
+
+    return linkUp;
 }
 
 uint32_t EthernetInterface::speed() const
@@ -3620,27 +3640,6 @@ void EthernetInterface::registerSignal(sdbusplus::bus::bus& bus)
                                         break;
                                     }
                                 }
-                            }
-                        }
-                        else if (t.first == "OnlineState" &&
-                                 manager.get().initCompleted)
-                        {
-                            if ((std::get<std::string>(t.second) == "online") &&
-                                (interfaceName() != "hostusb0"))
-                            {
-#ifdef AMI_NCSI_SUPPORT
-                                if (std::string{DEFAULT_NCSI_INTERFACE}.find(
-                                        interfaceName()) != std::string::npos)
-                                {
-                                    auto v =
-                                        phosphor::network::ncsi::getLinkStatus(
-                                            ifIdx);
-                                    EthernetInterfaceIntf::linkUp(
-                                        phosphor::network::ncsi::getLinkStatus(
-                                            ifIdx),
-                                        true);
-                                }
-#endif
                             }
                         }
                     }

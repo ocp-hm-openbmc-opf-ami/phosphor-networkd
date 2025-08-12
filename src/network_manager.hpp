@@ -9,6 +9,7 @@
 #include "xyz/openbmc_project/Network/Bond/Create/server.hpp"
 #endif
 #include "xyz/openbmc_project/Network/VLAN/Create/server.hpp"
+#include "host_interface.hpp"
 
 #include <function2/function2.hpp>
 #include <sdbusplus/bus.hpp>
@@ -173,6 +174,10 @@ class Manager : public ManagerIface
     stdplus::string_umap<std::unique_ptr<EthernetInterface>> interfaces;
     std::unordered_map<unsigned, EthernetInterface*> interfacesByIdx;
     std::unordered_set<unsigned> ignoredIntf;
+
+    /** @brief HostInterface dbus objects and their names
+     */
+    std::unique_ptr<phosphor::network::hostintf::HostInterface> hostIntf = nullptr;
 
     /** @brief Adds a hook that runs immediately prior to reloading
      *
