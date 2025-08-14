@@ -42,6 +42,7 @@ static void parseBondInfo(InterfaceInfo& info, std::string_view msg)
         auto [hdr, data] = netlink::extractRtAttr(msg);
         switch (hdr.rta_type)
         {
+#if 0
             case IFLA_BOND_ACTIVE_SLAVE:
                 activeSlaveFlag = false;
                 if (!data.empty())
@@ -70,6 +71,7 @@ static void parseBondInfo(InterfaceInfo& info, std::string_view msg)
                         break;
                 }
                 break;
+#endif
             case IFLA_BOND_MIIMON:
                 info.bondInfo->miiMonitor = static_cast<uint8_t>(
                     stdplus::raw::copyFrom<uint32_t>(data));
@@ -79,16 +81,23 @@ static void parseBondInfo(InterfaceInfo& info, std::string_view msg)
 
     if (activeSlaveFlag == true)
     {
-        char buf[1] = {0};
+        char buf[16] = {0};
         int fd = open("/sys/class/net/bond0/bonding/active_slave", O_RDONLY);
         if (fd < 0)
         {
             throw std::runtime_error("Failed to open active_slave file");
         }
 
-        if (read(fd, (char*)&buf, 1) == 0)
+        ssize_t ret = read(fd, (char*)&buf, sizeof(buf));
+        if (ret <= 0)
         {
             info.bondInfo.emplace("");
+        }
+        else
+        {
+            if (buf[strlen(buf)-1] == '\n')
+                buf[strlen(buf)-1]='\0'; // Remove the line-enter character
+            info.bondInfo.emplace(buf);
         }
 
         close(fd);
