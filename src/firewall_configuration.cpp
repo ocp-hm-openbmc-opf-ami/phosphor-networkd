@@ -760,6 +760,9 @@ void Configuration::appendPreloadRules()
         (void)runSystemCommand(
             "iptables",
             "-A OUTPUT -p icmp --icmp-type 11 -j DROP -m comment --comment \"Preload\"");
+        (void)runSystemCommand(
+            "iptables",
+            "-A OUTPUT -p icmp --icmp-type timestamp-reply -j DROP -m comment --comment \"Preload\"");
     } // if
     else
     {
