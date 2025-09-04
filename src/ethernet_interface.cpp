@@ -2217,12 +2217,11 @@ void EthernetInterface::writeConfigurationFile()
                 {
                     if ((addr.second->type() == IP::Protocol::IPv6 &&
                          !dhcp6() && EthernetInterfaceIntf::ipv6Enable()) ||
-                        (addr.second->type() == IP::Protocol::IPv4 &&
+                        (addr.second->type() == IP::Protocol::IPv4 ||
                          !dhcp4() && EthernetInterfaceIntf::ipv4Enable()))
                     {
                         {
-                            if (originIsManuallyAssigned(addr.second->origin(),
-                                                         addr.second->type()))
+			    if (addr.second->origin() == IP::AddressOrigin::Static)
                             {
                                 address.emplace_back(
                                     fmt::format("{}/{}", addr.second->address(),
@@ -2930,23 +2929,24 @@ bool EthernetInterface::ipv6Enable(bool value)
 
     if (value)
     {
+	if(!EthernetInterfaceIntf::dhcp6())
+                EthernetInterfaceIntf::dhcp6(false);
+        else
+                EthernetInterfaceIntf::dhcp6(true);
         std::system(
             fmt::format("ip link set dev {} down", interfaceName()).c_str());
         std::this_thread::sleep_for(std::chrono::seconds(3));
         std::system(
             fmt::format("ip link set dev {} up", interfaceName()).c_str());
         EthernetInterfaceIntf::ipv6Enable(value);
-        dhcp6(value);
     }
     else
     {
-        manager.get().addReloadPostHook([&]() {
             std::this_thread::sleep_for(std::chrono::seconds(10));
             lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME",
                       interfaceName());
             std::system(fmt::format("ip -6 addr flush dev {}", interfaceName())
                             .c_str());
-        });
         dhcp6(value);
         EthernetInterfaceIntf::ipv6Enable(value);
     }
@@ -2966,10 +2966,24 @@ bool EthernetInterface::ipv4Enable(bool value)
 
     if (value)
     {
-        EthernetInterfaceIntf::dhcp4(true);
+        if(!EthernetInterfaceIntf::dhcp4()){
+                EthernetInterfaceIntf::dhcp4(false);
+        }
+        else
+                EthernetInterfaceIntf::dhcp4(true);
+	std::system(
+            fmt::format("ip link set dev {} down", interfaceName()).c_str());
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::system(
+            fmt::format("ip link set dev {} up", interfaceName()).c_str());
     }
     else
     {
+	std::this_thread::sleep_for(std::chrono::seconds(10));
+            lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
+                      interfaceName());
+            std::system(fmt::format("ip -4 addr flush dev {}", interfaceName())
+                            .c_str());
         if (EthernetInterfaceIntf::dhcp4())
         {
             EthernetInterfaceIntf::dhcp4(false);
@@ -2978,7 +2992,6 @@ bool EthernetInterface::ipv4Enable(bool value)
 
     EthernetInterfaceIntf::ipv4Enable(value);
     writeConfigurationFile();
-    manager.get().reloadConfigs();
 
     return value;
 }
