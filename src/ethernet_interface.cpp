@@ -2386,6 +2386,19 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
 #if ENABLE_BOND_SUPPORT
     auto bondEnabled = false;
 #endif
+
+#ifdef HAVE_UBOOT_ENV
+    // Ensure that the valid address is stored in the u-boot-env
+    auto envVar = interfaceToUbootEthAddr(interface);
+    if (envVar)
+    {
+        // Trimming MAC addresses that are out of range. eg: AA:FF:FF:FF:FF:100;
+        // and those having more than 6 bytes. eg: AA:AA:AA:AA:AA:AA:BB
+        execute("/sbin/fw_setenv", "fw_setenv", envVar->c_str(),
+                validMAC.c_str());
+    }
+#endif // HAVE_UBOOT_ENV
+
     if (newMAC != oldMAC)
     {
         // Update everything that depends on the MAC value
@@ -2429,6 +2442,8 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 {
                     this->updateBondConfBackupForSlaveMAC(validMAC, intf);
                 }
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                execute("/sbin/reboot", "reboot", "-f");
             }
             else
             {
@@ -2457,18 +2472,6 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
 #endif
         manager.get().reloadConfigs();
     }
-
-#ifdef HAVE_UBOOT_ENV
-    // Ensure that the valid address is stored in the u-boot-env
-    auto envVar = interfaceToUbootEthAddr(interface);
-    if (envVar)
-    {
-        // Trimming MAC addresses that are out of range. eg: AA:FF:FF:FF:FF:100;
-        // and those having more than 6 bytes. eg: AA:AA:AA:AA:AA:AA:BB
-        execute("/sbin/fw_setenv", "fw_setenv", envVar->c_str(),
-                validMAC.c_str());
-    }
-#endif // HAVE_UBOOT_ENV
 
     return value;
 #else
