@@ -72,12 +72,11 @@ int16_t Configuration::addRule(
 {
     int16_t ret = 0;
     auto customIPv4rules = 0, customIPv6rules = 0;
-    if (control == (uint8_t)ControlBit::TIMEOUT ||
-        (control > (uint8_t)ControlBit::TIMEOUT &&
+    if (control > (uint8_t)ControlBit::TIMEOUT &&
          (control & (uint8_t)ControlBit::IP) == 0 &&
          (control & (uint8_t)ControlBit::MAC) == 0 &&
          (control & (uint8_t)ControlBit::PORT) == 0 &&
-         (control & (uint8_t)ControlBit::PROTOCOL) == 0))
+         (control & (uint8_t)ControlBit::PROTOCOL) == 0)
     {
         return -1;
     } // if
