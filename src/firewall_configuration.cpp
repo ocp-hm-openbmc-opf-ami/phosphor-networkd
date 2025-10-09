@@ -97,12 +97,11 @@ int16_t Configuration::delRule(
     FirewallIface::IP IPver)
 {
     int16_t ret;
-    if (control == (uint8_t)ControlBit::TIMEOUT ||
-        (control > (uint8_t)ControlBit::TIMEOUT &&
+    if (control > (uint8_t)ControlBit::TIMEOUT &&
          (control & (uint8_t)ControlBit::IP) == 0 &&
          (control & (uint8_t)ControlBit::MAC) == 0 &&
          (control & (uint8_t)ControlBit::PORT) == 0 &&
-         (control & (uint8_t)ControlBit::PROTOCOL) == 0))
+         (control & (uint8_t)ControlBit::PROTOCOL) == 0)
     {
         return -1;
     } // if
