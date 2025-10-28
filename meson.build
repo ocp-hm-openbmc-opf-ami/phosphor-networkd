@@ -36,7 +36,7 @@ conf_data.set10('PHY_CONFIGURATION_SUPPORT', get_option('enable-phy-configuratio
 conf_data.set10('NSUPDATE_SUPPORT', get_option('enable-nsupdate-feature'))
 conf_data.set10('TSIG_SUPPORT', get_option('enable-tsig-feature'))
 conf_data.set10('AVAHI_SUPPORT', get_option('enable-avahi-support'))
-
+conf_data.set10('AMI_NCSI_MANUAL_DETECTION', get_option('ncsi-manual-detect'))
 sdbusplus_dep = dependency('sdbusplus')
 sdbusplusplus_prog = find_program('sdbus++', native: true)
 sdbuspp_gen_meson_prog = find_program('sdbus++-gen-meson', native: true)

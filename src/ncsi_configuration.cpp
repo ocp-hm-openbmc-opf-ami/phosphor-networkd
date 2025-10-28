@@ -166,6 +166,16 @@ int16_t Configuration::setPackageChannel(uint8_t package, uint8_t channel)
     return 0;
 }
 
+void Configuration::manualDetection()
+{
+#ifndef AMI_NCSI_MANUAL_DETECTION
+    elog<NotAllowed>(
+        NotAllowedArgument::REASON("Writing MAC address is not allowed"));
+#else
+    std::system("echo 1 > /proc/ncsi_manual_detect");
+#endif
+}
+
 std::vector<std::tuple<uint16_t, std::vector<uint16_t>>>
     Configuration::channelList() const
 {

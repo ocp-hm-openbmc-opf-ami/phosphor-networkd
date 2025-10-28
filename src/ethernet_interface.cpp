@@ -353,9 +353,13 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
         std::string::npos)
     {
+#ifdef AMI_NCSI_MANUAL_DETECTION
+        EthernetInterfaceIntf::linkUp(false, skipSignal);
+#else
         auto v = phosphor::network::ncsi::getLinkStatus(ifIdx);
         EthernetInterfaceIntf::linkUp(
             phosphor::network::ncsi::getLinkStatus(ifIdx), skipSignal);
+#endif
     }
 #endif
     config::Parser config(

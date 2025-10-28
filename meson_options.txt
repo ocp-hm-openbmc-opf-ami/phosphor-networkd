@@ -25,3 +25,4 @@ option('enable-bond-feature', type: 'boolean', description: 'Enable bond feature
 option('enable-nsupdate-feature', type: 'boolean', description: 'Enable nsupdate feature or not')
 option('enable-tsig-feature', type: 'boolean', description: 'Enable TSIG feature or not')
 option('enable-avahi-support', type: 'boolean', description: 'Enable avahi support or not')
+option('ncsi-manual-detect', type: 'boolean', description: 'Enable NCSI Manual Detection Feature or not')
