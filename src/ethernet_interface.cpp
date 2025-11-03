@@ -1182,6 +1182,7 @@ bool EthernetInterface::dhcp6(bool value)
         {
             ipv6IndexUsedList.clear();
             ipv6IndexUsedList.assign(IPV6_MAX_NUM + 1, std::nullopt);
+	    EthernetInterfaceIntf::ipv6AcceptRA(true);
         } // if
 
         manager.get().addReloadPostHook([&]() {
@@ -2946,29 +2947,46 @@ bool EthernetInterface::ipv6Enable(bool value)
 
     if (value)
     {
-	if(!EthernetInterfaceIntf::dhcp6())
-                EthernetInterfaceIntf::dhcp6(false);
-        else
-                EthernetInterfaceIntf::dhcp6(true);
+	if (EthernetInterfaceIntf::ipv6Enable() == false && preDhcp6State)
+        {
+            EthernetInterfaceIntf::dhcp6(true);
+        }
+        EthernetInterfaceIntf::ipv6AcceptRA(true);
         std::system(
             fmt::format("ip link set dev {} down", interfaceName()).c_str());
         std::this_thread::sleep_for(std::chrono::seconds(3));
         std::system(
             fmt::format("ip link set dev {} up", interfaceName()).c_str());
         EthernetInterfaceIntf::ipv6Enable(value);
+	writeConfigurationFile();
+        manager.get().reloadConfigs();
     }
     else
     {
+	preDhcp6State = EthernetInterfaceIntf::dhcp6();
+        if(dhcp6())
+	{
+            manager.get().addReloadPostHook([&]() {
+                lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME",
+                          interfaceName());
+                std::system(fmt::format("ip -6 addr flush dev {}", interfaceName())
+                                .c_str());
+            });
+        }
+	else
+	{
             std::this_thread::sleep_for(std::chrono::seconds(10));
             lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME",
                       interfaceName());
             std::system(fmt::format("ip -6 addr flush dev {}", interfaceName())
                             .c_str());
-        dhcp6(value);
+	}
+        EthernetInterfaceIntf::dhcp6(false);
         EthernetInterfaceIntf::ipv6Enable(value);
+	writeConfigurationFile();
+        manager.get().reloadConfigs();
     }
 
-    writeConfigurationFile();
     return value;
 }
 
@@ -2983,33 +3001,44 @@ bool EthernetInterface::ipv4Enable(bool value)
 
     if (value)
     {
-        if(!EthernetInterfaceIntf::dhcp4()){
-                EthernetInterfaceIntf::dhcp4(false);
+	if (EthernetInterfaceIntf::ipv4Enable() == false && preDhcp4State)
+        {
+            EthernetInterfaceIntf::dhcp4(true);
         }
-        else
-                EthernetInterfaceIntf::dhcp4(true);
-	std::system(
-            fmt::format("ip link set dev {} down", interfaceName()).c_str());
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        std::system(
-            fmt::format("ip link set dev {} up", interfaceName()).c_str());
+
+        EthernetInterfaceIntf::ipv4Enable(value);
+        writeConfigurationFile();
+        manager.get().addReloadPostHook([ifname = interfaceName()]() {
+            std::system(fmt::format("ip link set dev {} down", ifname).c_str());
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+            std::system(fmt::format("ip link set dev {} up", ifname).c_str());
+        });
+
+        manager.get().reloadConfigs();
     }
     else
     {
-	std::this_thread::sleep_for(std::chrono::seconds(10));
+	preDhcp4State = EthernetInterfaceIntf::dhcp4();
+        if(dhcp4()){
+            manager.get().addReloadPostHook([&]() {
+                lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
+                          interfaceName());
+                std::system(fmt::format("ip -4 addr flush dev {}", interfaceName())
+                                .c_str());
+            });
+        }
+        else{
+            std::this_thread::sleep_for(std::chrono::seconds(10));
             lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
                       interfaceName());
             std::system(fmt::format("ip -4 addr flush dev {}", interfaceName())
                             .c_str());
-        if (EthernetInterfaceIntf::dhcp4())
-        {
-            EthernetInterfaceIntf::dhcp4(false);
-        } // if
+        }
+        EthernetInterfaceIntf::dhcp4(false);
+        EthernetInterfaceIntf::ipv4Enable(value);
+	writeConfigurationFile();
+        manager.get().reloadConfigs();
     }
-
-    EthernetInterfaceIntf::ipv4Enable(value);
-    writeConfigurationFile();
-
     return value;
 }
 

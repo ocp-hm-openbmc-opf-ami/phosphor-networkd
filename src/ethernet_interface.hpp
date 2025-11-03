@@ -417,6 +417,12 @@ class EthernetInterface : public Ifaces
     /** List to save index and IPv6 Address */
     std::vector<std::optional<std::string>> ipv6IndexUsedList;
 
+    /** Previous DHCP6 state to restore when re-enabling IPv6 */
+    bool preDhcp6State = false;
+
+    /** Previous DHCP4 state to restore when re-enabling IPv4 */
+    bool preDhcp4State = false;
+
     std::optional<dhcp::Configuration> dhcp4Conf, dhcp6Conf;
 
     /** @brief Get current interface index.
