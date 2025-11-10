@@ -33,6 +33,7 @@ constexpr char BONDING_CONF_BAK_DIR[] = "/etc/interface/bonding";
 constexpr auto BMC_STATE_PROP_INTERFACE = "xyz.openbmc_project.State.BMC";
 constexpr auto BMC_STATE_SERVICE_PATH = "/xyz/openbmc_project/state/bmc0";
 constexpr char DNS_CONF_DIR[] = "/etc/dns.d";
+const std::string bondIfcName = "bond0";
 
 namespace phosphor
 {
@@ -42,6 +43,9 @@ namespace network
 using namespace phosphor::logging;
 using namespace sdbusplus::xyz::openbmc_project::Common::Error;
 using Argument = xyz::openbmc_project::Common::InvalidArgument;
+using sdbusplus::xyz::openbmc_project::Common::Error::NotAllowed;
+using REASON =
+    phosphor::logging::xyz::openbmc_project::Common::NotAllowed::REASON;
 using std::literals::string_view_literals::operator""sv;
 
 static constexpr const char* userMgrObjBasePath = "/xyz/openbmc_project/user";
@@ -725,6 +729,15 @@ void Manager::removeDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
 
 ObjectPath Manager::vlan(std::string interfaceName, uint32_t id)
 {
+    if (interfaces.find(bondIfcName) != interfaces.end())
+    {
+        if(interfaceName != bondIfcName )
+        {
+          log<level::ERR>("Create vlan on slave interface is not allowed.\n");
+            elog<NotAllowed>(REASON("Create vlan on slave interface is not allowed.\n"));
+        }
+    }
+
     if (id <= 1 || id >= 4095)
     {
         lg2::error("VLAN ID {NET_VLAN} is not valid", "NET_VLAN", id);
