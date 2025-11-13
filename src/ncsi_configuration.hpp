@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ncsi_util.hpp"
+#include "system_queries.hpp"
 #include "types.hpp"
 
 #include <sdbusplus/bus.hpp>
@@ -63,6 +64,11 @@ class Configuration : NCSIObj
      *  @return result[int16_t] -
      */
     int16_t setPackageChannel(uint8_t package, uint8_t channel) override;
+
+    /** @brief Implementation for ManualDetection
+     *  Trigger NCSI detection manually
+     */
+    void manualDetection() override;
 
     /** Get value of ChannelList */
     std::vector<std::tuple<uint16_t, std::vector<uint16_t>>>
