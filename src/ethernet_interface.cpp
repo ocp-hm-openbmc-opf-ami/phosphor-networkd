@@ -139,6 +139,9 @@ EthernetInterface::EthernetInterface(
 {
     interfaceName(*info.intf.name, true);
     auto dhcpVal = getDHCPValue(config);
+    #if ENABLE_BOND_SUPPORT
+    auto bondNetdevBackup = config::pathForIntfDev(manager.get().getConfDir(), bondIfcName);
+    #endif
     EthernetInterfaceIntf::dhcp4(dhcpVal.v4, true);
     EthernetInterfaceIntf::dhcp6(dhcpVal.v6, true);
     EthernetInterfaceIntf::ipv6AcceptRA(getIPv6AcceptRA(config), true);
@@ -274,13 +277,20 @@ EthernetInterface::EthernetInterface(
 #if ENABLE_BOND_SUPPORT
     if (info.intf.bondInfo)
     {
+        auto miiMonitorVal = info.intf.bondInfo->miiMonitor;
+        if (fs::exists(bondNetdevBackup))
+        {
+            config::Parser parser(bondNetdevBackup);
+            auto value = parser.map.getLastValueString("Bond", "MIIMonitorSec");
+            if (value) miiMonitorVal = static_cast<uint8_t>(std::stoi(*value));
+        }
         if (!info.intf.parent_idx)
         {
             std::runtime_error("Missing parent link");
         }
         bonding.emplace(
             bus, this->objPath.c_str(), *this, info.intf.bondInfo->activeSlave,
-            info.intf.bondInfo->miiMonitor, Bond::Mode::ActiveBackup);
+            miiMonitorVal, Bond::Mode::ActiveBackup);
     }
 #endif
     for (const auto& [_, addr] : info.addrs)
