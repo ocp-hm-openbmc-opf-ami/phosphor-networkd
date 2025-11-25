@@ -2963,6 +2963,29 @@ bool EthernetInterface::ipv6Enable(bool value)
     }
     else
     {
+	auto intf_count = 0;
+        for (const auto& [_, intf] : manager.get().interfaces)
+        {
+            if (intf->EthernetInterfaceIntf::linkUp())
+            {
+                intf_count++;
+            }
+        }
+        if(intf_count == 1)
+        {
+            if(!EthernetInterfaceIntf::ipv4Enable()){
+                log<level::ERR>(
+                    fmt::format(
+                    "Not support in current state. IPv4 of {} is not enabled. Either enable IPv4/IPv6\n",
+                     interfaceName())
+                     .c_str());
+                elog<NotAllowed>(NotAllowedArgument::REASON(
+                     fmt::format(
+                     "Not support in current state. IPv4 of {} is not enabled.\n",
+                     interfaceName())
+                     .c_str()));
+            }
+        }
 	preDhcp6State = EthernetInterfaceIntf::dhcp6();
         if(dhcp6())
 	{
@@ -3018,6 +3041,30 @@ bool EthernetInterface::ipv4Enable(bool value)
     }
     else
     {
+	auto intf_count = 0;
+        for (const auto& [_, intf] : manager.get().interfaces)
+        {
+            if (intf->EthernetInterfaceIntf::linkUp())
+            {
+                intf_count++;
+            }
+        }
+        if(intf_count == 1)
+        {
+            if(!EthernetInterfaceIntf::ipv6Enable()){
+                log<level::ERR>(
+                    fmt::format(
+                    "Not support in current state. IPv6 of {} is not enabled. Either enable IPv4/IPv6\n",
+                     interfaceName())
+                     .c_str());
+                elog<NotAllowed>(NotAllowedArgument::REASON(
+                     fmt::format(
+                     "Not support in current state. IPv6 of {} is not enabled.\n",
+                     interfaceName())
+                     .c_str()));
+            }
+        }
+	std::this_thread::sleep_for(std::chrono::seconds(10));
 	preDhcp4State = EthernetInterfaceIntf::dhcp4();
         if(dhcp4()){
             manager.get().addReloadPostHook([&]() {
