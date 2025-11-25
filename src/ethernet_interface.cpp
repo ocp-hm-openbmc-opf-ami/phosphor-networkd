@@ -363,12 +363,15 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
         std::string::npos)
     {
-#ifdef AMI_NCSI_MANUAL_DETECTION
+#if AMI_NCSI_MANUAL_DETECTION
         EthernetInterfaceIntf::linkUp(false, skipSignal);
+        if (!phosphor::network::ncsi::deviceAvailable(ifIdx))
+            EthernetInterfaceIntf::nicEnabled(false);
 #else
         auto v = phosphor::network::ncsi::getLinkStatus(ifIdx);
-        EthernetInterfaceIntf::linkUp(
-            phosphor::network::ncsi::getLinkStatus(ifIdx), skipSignal);
+        EthernetInterfaceIntf::linkUp(v, skipSignal);
+        if (!phosphor::network::ncsi::deviceAvailable(ifIdx))
+            EthernetInterfaceIntf::nicEnabled(false);
 #endif
     }
 #endif
@@ -1341,6 +1344,15 @@ size_t EthernetInterface::mtu(size_t value)
 
 bool EthernetInterface::nicEnabled(bool value)
 {
+#ifdef AMI_NCSI_SUPPORT
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
+        std::string::npos)
+    {
+        if (!phosphor::network::ncsi::deviceAvailable(ifIdx)) {
+            elog<NotAllowed>(NotAllowedArgument::REASON("NCSI interface is not available"));
+        }
+    }
+#endif
     if (value == EthernetInterfaceIntf::nicEnabled())
     {
         return value;
