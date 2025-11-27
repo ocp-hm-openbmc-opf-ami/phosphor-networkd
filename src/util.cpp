@@ -7,6 +7,7 @@
 #include "types.hpp"
 
 #include <sys/wait.h>
+#include <arpa/inet.h>
 
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -26,6 +27,7 @@
 #include <array>
 #include <sstream>
 #include <vector>
+#include <regex>
 
 namespace phosphor
 {
@@ -607,10 +609,69 @@ void isValidIPv4Addr(in_addr* addr, Type type)
     }     // if
     else if (type == Type::IP4_ADDRESS)
     {
+	
         if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0)
         {
             throw std::invalid_argument("IPv4 address is 0.0.0.0");
         } // if
+        uint32_t hostAddr = (ip[0] << 24) | (ip[1] << 16) | (ip[2] << 8) | ip[3];
+
+        if ((hostAddr & 0xFF000000) == 0x00000000) //0.0.0.0 - 0.255.255.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be in reserved range");
+        }
+        else if ((hostAddr & 0xFFFFFF00) == 0xC0000000) //192.0.0.0 - 192.0.0.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be in reserved range");
+        }
+        else if ((hostAddr & 0xFFFFFF00) == 0xC0000200) //192.0.2.0 - 192.0.2.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be in documentation range");
+        }
+        else if ((hostAddr & 0xFFFE0000) == 0xC6120000) //198.18.0.0 - 198.19.255.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be in benchmark range");
+        }
+        else if ((hostAddr & 0xFFFFFF00) == 0xC6336400) //198.51.100.0 - 198.51.100.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be in documentation range");
+        }
+        else if ((hostAddr & 0xFFFFFF00) == 0xCB007100) //203.0.113.0 - 203.0.113.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be in documentation range");
+	}
+        else if ((hostAddr & 0xF0000000) == 0xE0000000) //224.0.0.0 - 239.255.255.255
+	{
+            throw std::invalid_argument("IPv4 address cannot be multicast range");
+        }
+        else if ((hostAddr & 0xF0000000) == 0xF0000000) //240.0.0.0 - 255.255.255.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be in reserved range");
+        }
+        std::string addrStr = inet_ntoa(*addr);
+        std::regex ipv4Pattern(R"(^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$)");
+        std::smatch match;
+        if (!std::regex_match(addrStr, match, ipv4Pattern))
+        {
+            throw std::invalid_argument("Invalid IPv4 address format");
+        }
+        for (int i = 1; i <= 4; i++)
+        {
+            std::string octetStr = match[i];
+            if (octetStr.empty())
+            {
+                throw std::invalid_argument("Invalid IPv4 address");
+            }
+            if (octetStr.length() > 1 && octetStr[0] == '0')
+            {
+                throw std::invalid_argument("Invalid IPv4 address, cannot have leading zeros");
+            }
+            int octet = std::stoi(octetStr);
+            if (octet < 0 || octet > 255)
+            {
+                throw std::invalid_argument("Invalid IPv4 address given. Out of range (0-255)");
+            }
+        }
     }     // else if
 }
 
@@ -660,6 +721,14 @@ void isValidIPv6Addr(in6_addr* addr, Type type)
     else if (IN6_IS_ADDR_UNSPECIFIED(addr))
     {
         throw std::invalid_argument(strType + " is Unspecified.");
+    }
+    else if (IN6_IS_ADDR_LINKLOCAL(addr))
+    {
+        throw std::invalid_argument("IPv6 address cannot be link-local");
+    }
+    else if ((stdplus::ntoh(*(uint32_t*)addr) & 0xFFFFFFFF) == 0x20010db8)
+    {
+        throw std::invalid_argument("IPv6 address cannot be in documentation range");
     }
 }
 

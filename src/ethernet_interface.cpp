@@ -1375,7 +1375,15 @@ ServerList EthernetInterface::staticNameServers(ServerList value)
     {
         try
         {
-            ip = stdplus::toStr(stdplus::fromStr<stdplus::InAnyAddr>(ip));
+	    if (ip.find(":") != std::string::npos)
+            {
+                ip_address::isValidIPv6Addr(ip, ip_address::Type::IP6_ADDRESS);
+            }
+            else
+            {
+                ip_address::isValidIPv4Addr(ip, ip_address::Type::IP4_ADDRESS);
+            }
+	    ip = stdplus::toStr(stdplus::fromStr<stdplus::InAnyAddr>(ip));
         }
         catch (const std::exception& e)
         {

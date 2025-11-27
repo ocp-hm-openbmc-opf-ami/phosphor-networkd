@@ -805,7 +805,7 @@ int16_t Configuration::setDNSServer(std::string interface,
                            "IPADDRESS", ipaddress);
                 return -1;
             }
-            stdplus::fromStr<stdplus::InAnyAddr>(ipaddress);
+	    stdplus::fromStr<stdplus::InAnyAddr>(ipaddress);
         }
         catch (std::invalid_argument e)
         {
@@ -813,21 +813,45 @@ int16_t Configuration::setDNSServer(std::string interface,
                        "IPADDRESS", ipaddress);
             return -1;
         }
+	catch (const std::exception& e)
+        {
+            lg2::error("Invalid IP `{IPADDRESS}`: {ERROR}\n",
+                       "IPADDRESS", ipaddress, "ERROR", e.what());
+            return -1;
+        }
     }
-    auto result = iface->second->staticNameServers(servers);
-    if (servers.size() == 0 && result.size() == 0)
-    {
+    try{
+	auto result = iface->second->staticNameServers(servers);
+    	if (servers.size() == 0 && result.size() == 0)
+   	{
+            writeConfigurationFile();
+            return 0;
+    	}
+    	else if (result.size() == 0)
+    	{
+           return -1;
+        }
         writeConfigurationFile();
+
         return 0;
     }
-    else if (result.size() == 0)
+    catch (const sdbusplus::exception::SdBusError& e)
     {
+        lg2::error("D-Bus error while setting DNS servers: {ERROR}", "ERROR", e);
+        auto dbusError = e.get_error();
+        if ((dbusError != nullptr) &&
+            ((strcmp(dbusError->name, "org.freedesktop.DBus.Error.Disconnected") == 0) ||
+             (strcmp(dbusError->name, "org.freedesktop.DBus.Error.NoReply") == 0)))
+        {
+            lg2::error("Remote peer disconnected error detected in setDNSServer");
+        }
         return -1;
     }
-
-    writeConfigurationFile();
-
-    return 0;
+    catch (const std::exception& e)
+    {
+        lg2::error("Exception while setting DNS servers: {ERROR}", "ERROR", e);
+        return -1;
+    }
 }
 
 #if 0
