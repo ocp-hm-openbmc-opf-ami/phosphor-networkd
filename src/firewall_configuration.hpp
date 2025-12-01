@@ -30,6 +30,7 @@ using IPTableElementTuple =
 
 constexpr auto AMI_IPTABLES_DIR = "/etc/iptables";
 constexpr auto CUSTOM_IPTABLES_DIR = "/etc/interface/iptables";
+constexpr auto TEMP_DIR = "/tmp";
 constexpr auto IPTABLES_RULES = "iptables.rules";
 constexpr auto IP6TABLES_RULES = "ip6tables.rules";
 
@@ -131,6 +132,22 @@ class Configuration : Iface
      * std::string>>] -
      */
     std::vector<IPTableElementTuple> getRules(IP ip) override;
+    /** @brief Implementation for ReorderRules
+     *  Reorder the rules
+     *
+     *  @param[in] ip -
+     *  @param[in] rules -
+     *
+     *  @return result[int16_t] -
+     */
+    int16_t reorderRules(IP ip, std::vector<IPTableElementTuple> rules) override;
+
+    int16_t addRuleDetailSteps(
+        FirewallIface::Target target, uint8_t control,
+        FirewallIface::Protocol protocol, std::string startIPAddress,
+        std::string endIPAddress, uint16_t startPort, uint16_t endPort,
+        std::string macAddress, std::string startTime, std::string stopTime,
+        FirewallIface::IP IPver);
 
     template <typename T>
     void writeConfigurationFile(bool isInit);
