@@ -588,9 +588,9 @@ void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
                 {
                     if (!it1->second->EthernetInterfaceIntf::dhcp4())
                     {
-                        const config::Parser& ifaceConfig(
-                            config::pathForIntfConf(getConfDir(),
-                                        it1->second->interfaceName()));
+                        const config::Parser& ifaceConfig(fs::path(
+					fmt::format("{}/{}", INTERFACE_CONF_DIR,
+						it1->second->interfaceName())));
                         auto gw4 = stdplus::fromStr<stdplus::In4Addr>(
                             getIPv4DefaultGateway(ifaceConfig));
                         it->second.defgw4.emplace(gw4);
@@ -616,9 +616,9 @@ void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
                 {
                     if (!it->second->EthernetInterfaceIntf::dhcp4())
                     {
-                        const config::Parser& ifaceConfig(
-                            config::pathForIntfConf(getConfDir(),
-                                        it->second->interfaceName()));
+			const config::Parser& ifaceConfig(fs::path(
+                                        fmt::format("{}/{}", INTERFACE_CONF_DIR,
+                                                        it->second->interfaceName())));
                         it->second->EthernetInterfaceIntf::defaultGateway(
                             getIPv4DefaultGateway(ifaceConfig));
                     }

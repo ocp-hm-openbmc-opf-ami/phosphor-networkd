@@ -560,7 +560,7 @@ std::string getIPv4BackupGateway(const config::Parser& config)
 
 std::string getIPv4DefaultGateway(const config::Parser& config)
 {
-    if (auto str = config.map.getLastValueString("Route", "Gateway");
+    if (auto str = config.map.getLastValueString("Route", "DefaultGateway");
         str == nullptr)
     {
         return "";
