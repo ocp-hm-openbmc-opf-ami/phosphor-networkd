@@ -139,6 +139,9 @@ EthernetInterface::EthernetInterface(
 {
     interfaceName(*info.intf.name, true);
     auto dhcpVal = getDHCPValue(config);
+    #if ENABLE_BOND_SUPPORT
+    auto bondNetdevBackup = config::pathForIntfDev(manager.get().getConfDir(), bondIfcName);
+    #endif
     EthernetInterfaceIntf::dhcp4(dhcpVal.v4, true);
     EthernetInterfaceIntf::dhcp6(dhcpVal.v6, true);
     EthernetInterfaceIntf::ipv6AcceptRA(getIPv6AcceptRA(config), true);
@@ -274,13 +277,20 @@ EthernetInterface::EthernetInterface(
 #if ENABLE_BOND_SUPPORT
     if (info.intf.bondInfo)
     {
+        auto miiMonitorVal = info.intf.bondInfo->miiMonitor;
+        if (fs::exists(bondNetdevBackup))
+        {
+            config::Parser parser(bondNetdevBackup);
+            auto value = parser.map.getLastValueString("Bond", "MIIMonitorSec");
+            if (value) miiMonitorVal = static_cast<uint8_t>(std::stoi(*value));
+        }
         if (!info.intf.parent_idx)
         {
             std::runtime_error("Missing parent link");
         }
         bonding.emplace(
             bus, this->objPath.c_str(), *this, info.intf.bondInfo->activeSlave,
-            info.intf.bondInfo->miiMonitor, Bond::Mode::ActiveBackup);
+            miiMonitorVal, Bond::Mode::ActiveBackup);
     }
 #endif
     for (const auto& [_, addr] : info.addrs)
@@ -353,12 +363,15 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
     if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
         std::string::npos)
     {
-#ifdef AMI_NCSI_MANUAL_DETECTION
+#if AMI_NCSI_MANUAL_DETECTION
         EthernetInterfaceIntf::linkUp(false, skipSignal);
+        if (!phosphor::network::ncsi::deviceAvailable(ifIdx))
+            EthernetInterfaceIntf::nicEnabled(false);
 #else
         auto v = phosphor::network::ncsi::getLinkStatus(ifIdx);
-        EthernetInterfaceIntf::linkUp(
-            phosphor::network::ncsi::getLinkStatus(ifIdx), skipSignal);
+        EthernetInterfaceIntf::linkUp(v, skipSignal);
+        if (!phosphor::network::ncsi::deviceAvailable(ifIdx))
+            EthernetInterfaceIntf::nicEnabled(false);
 #endif
     }
 #endif
@@ -1172,6 +1185,7 @@ bool EthernetInterface::dhcp6(bool value)
         {
             ipv6IndexUsedList.clear();
             ipv6IndexUsedList.assign(IPV6_MAX_NUM + 1, std::nullopt);
+	    EthernetInterfaceIntf::ipv6AcceptRA(true);
         } // if
 
         manager.get().addReloadPostHook([&]() {
@@ -1330,6 +1344,15 @@ size_t EthernetInterface::mtu(size_t value)
 
 bool EthernetInterface::nicEnabled(bool value)
 {
+#ifdef AMI_NCSI_SUPPORT
+    if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
+        std::string::npos)
+    {
+        if (!phosphor::network::ncsi::deviceAvailable(ifIdx)) {
+            elog<NotAllowed>(NotAllowedArgument::REASON("NCSI interface is not available"));
+        }
+    }
+#endif
     if (value == EthernetInterfaceIntf::nicEnabled())
     {
         return value;
@@ -1364,7 +1387,15 @@ ServerList EthernetInterface::staticNameServers(ServerList value)
     {
         try
         {
-            ip = stdplus::toStr(stdplus::fromStr<stdplus::InAnyAddr>(ip));
+	    if (ip.find(":") != std::string::npos)
+            {
+                ip_address::isValidIPv6Addr(ip, ip_address::Type::IP6_ADDRESS);
+            }
+            else
+            {
+                ip_address::isValidIPv4Addr(ip, ip_address::Type::IP4_ADDRESS);
+            }
+	    ip = stdplus::toStr(stdplus::fromStr<stdplus::InAnyAddr>(ip));
         }
         catch (const std::exception& e)
         {
@@ -2936,29 +2967,69 @@ bool EthernetInterface::ipv6Enable(bool value)
 
     if (value)
     {
-	if(!EthernetInterfaceIntf::dhcp6())
-                EthernetInterfaceIntf::dhcp6(false);
-        else
-                EthernetInterfaceIntf::dhcp6(true);
+	if (EthernetInterfaceIntf::ipv6Enable() == false && preDhcp6State)
+        {
+            EthernetInterfaceIntf::dhcp6(true);
+        }
+        EthernetInterfaceIntf::ipv6AcceptRA(true);
         std::system(
             fmt::format("ip link set dev {} down", interfaceName()).c_str());
         std::this_thread::sleep_for(std::chrono::seconds(3));
         std::system(
             fmt::format("ip link set dev {} up", interfaceName()).c_str());
         EthernetInterfaceIntf::ipv6Enable(value);
+	writeConfigurationFile();
+        manager.get().reloadConfigs();
     }
     else
     {
+	auto intf_count = 0;
+        for (const auto& [_, intf] : manager.get().interfaces)
+        {
+            if (intf->EthernetInterfaceIntf::linkUp())
+            {
+                intf_count++;
+            }
+        }
+        if(intf_count == 1)
+        {
+            if(!EthernetInterfaceIntf::ipv4Enable()){
+                log<level::ERR>(
+                    fmt::format(
+                    "Not support in current state. IPv4 of {} is not enabled. Either enable IPv4/IPv6\n",
+                     interfaceName())
+                     .c_str());
+                elog<NotAllowed>(NotAllowedArgument::REASON(
+                     fmt::format(
+                     "Not support in current state. IPv4 of {} is not enabled.\n",
+                     interfaceName())
+                     .c_str()));
+            }
+        }
+	preDhcp6State = EthernetInterfaceIntf::dhcp6();
+        if(dhcp6())
+	{
+            manager.get().addReloadPostHook([&]() {
+                lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME",
+                          interfaceName());
+                std::system(fmt::format("ip -6 addr flush dev {}", interfaceName())
+                                .c_str());
+            });
+        }
+	else
+	{
             std::this_thread::sleep_for(std::chrono::seconds(10));
             lg2::info("Flush IPv6 address on dev {NAME}\n", "NAME",
                       interfaceName());
             std::system(fmt::format("ip -6 addr flush dev {}", interfaceName())
                             .c_str());
-        dhcp6(value);
+	}
+        EthernetInterfaceIntf::dhcp6(false);
         EthernetInterfaceIntf::ipv6Enable(value);
+	writeConfigurationFile();
+        manager.get().reloadConfigs();
     }
 
-    writeConfigurationFile();
     return value;
 }
 
@@ -2973,33 +3044,68 @@ bool EthernetInterface::ipv4Enable(bool value)
 
     if (value)
     {
-        if(!EthernetInterfaceIntf::dhcp4()){
-                EthernetInterfaceIntf::dhcp4(false);
+	if (EthernetInterfaceIntf::ipv4Enable() == false && preDhcp4State)
+        {
+            EthernetInterfaceIntf::dhcp4(true);
         }
-        else
-                EthernetInterfaceIntf::dhcp4(true);
-	std::system(
-            fmt::format("ip link set dev {} down", interfaceName()).c_str());
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        std::system(
-            fmt::format("ip link set dev {} up", interfaceName()).c_str());
+
+        EthernetInterfaceIntf::ipv4Enable(value);
+        writeConfigurationFile();
+        manager.get().addReloadPostHook([ifname = interfaceName()]() {
+            std::system(fmt::format("ip link set dev {} down", ifname).c_str());
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+            std::system(fmt::format("ip link set dev {} up", ifname).c_str());
+        });
+
+        manager.get().reloadConfigs();
     }
     else
     {
+	auto intf_count = 0;
+        for (const auto& [_, intf] : manager.get().interfaces)
+        {
+            if (intf->EthernetInterfaceIntf::linkUp())
+            {
+                intf_count++;
+            }
+        }
+        if(intf_count == 1)
+        {
+            if(!EthernetInterfaceIntf::ipv6Enable()){
+                log<level::ERR>(
+                    fmt::format(
+                    "Not support in current state. IPv6 of {} is not enabled. Either enable IPv4/IPv6\n",
+                     interfaceName())
+                     .c_str());
+                elog<NotAllowed>(NotAllowedArgument::REASON(
+                     fmt::format(
+                     "Not support in current state. IPv6 of {} is not enabled.\n",
+                     interfaceName())
+                     .c_str()));
+            }
+        }
 	std::this_thread::sleep_for(std::chrono::seconds(10));
+	preDhcp4State = EthernetInterfaceIntf::dhcp4();
+        if(dhcp4()){
+            manager.get().addReloadPostHook([&]() {
+                lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
+                          interfaceName());
+                std::system(fmt::format("ip -4 addr flush dev {}", interfaceName())
+                                .c_str());
+            });
+        }
+        else{
+            std::this_thread::sleep_for(std::chrono::seconds(10));
             lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
                       interfaceName());
             std::system(fmt::format("ip -4 addr flush dev {}", interfaceName())
                             .c_str());
-        if (EthernetInterfaceIntf::dhcp4())
-        {
-            EthernetInterfaceIntf::dhcp4(false);
-        } // if
+        }
+        EthernetInterfaceIntf::dhcp4(false);
+        EthernetInterfaceIntf::ipv4Enable(value);
+	writeConfigurationFile();
+        manager.get().reloadConfigs();
     }
-
-    EthernetInterfaceIntf::ipv4Enable(value);
-    writeConfigurationFile();
-
     return value;
 }
 

@@ -168,9 +168,8 @@ int16_t Configuration::setPackageChannel(uint8_t package, uint8_t channel)
 
 void Configuration::manualDetection()
 {
-#ifndef AMI_NCSI_MANUAL_DETECTION
-    elog<NotAllowed>(
-        NotAllowedArgument::REASON("Writing MAC address is not allowed"));
+#if !AMI_NCSI_MANUAL_DETECTION
+    elog<NotAllowed>(REASON("Manual Detection is not enabled"));
 #else
     std::system("echo 1 > /proc/ncsi_manual_detect");
 #endif
