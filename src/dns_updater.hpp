@@ -218,7 +218,7 @@ class Configuration : Iface
 
   protected:
     void writeConfigurationFile();
-    void updateDNSInfo(bool bakupInfo);
+    int16_t updateDNSInfo(bool bakupInfo);
     std::string getRevIPv4(std::string ipv4);
     std::string getRevIPv6(std::string ipv6);
     std::vector<std::tuple<std::string, bool, bool, ddnsIface::Method>>
