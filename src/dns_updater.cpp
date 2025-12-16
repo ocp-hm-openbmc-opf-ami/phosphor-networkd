@@ -377,7 +377,7 @@ int16_t Configuration::toDeregister()
         return -1;
     }
 
-    updateDNSInfo(true);
+    if(updateDNSInfo(true) == -1) return -1;
     auto [setting, hostname] = preHost;
     for (auto it = preIfaceConf.begin(); it != preIfaceConf.end(); it++)
     {
@@ -1230,7 +1230,7 @@ void Configuration::writeConfigurationFile()
     lg2::info("Wrote dns file: {DNS_CONF}", "DNS_CONF", DNS_CONF);
 }
 
-void Configuration::updateDNSInfo(bool bakupInfo)
+int16_t Configuration::updateDNSInfo(bool bakupInfo)
 {
     config::Parser conf;
     std::string filePath;
@@ -1253,6 +1253,14 @@ void Configuration::updateDNSInfo(bool bakupInfo)
 
     if (fs::exists(filePath))
     {
+        if(!conf.map.getLastValueString("HostConf", "Automatic") ||
+			!conf.map.getLastValueString("HostConf", "Hostname") ||
+			!conf.map.getLastValueString("mDNS", "UseMDNS") ||
+			!conf.map.getLastValueString("DDNS", "SendNsupdate"))
+        {
+            log<level::ERR>("Skipping host update due to missing values");
+            return -1;
+        }
         conf.setFile(filePath);
         {
             tmpHost = std::make_tuple(
@@ -1264,6 +1272,14 @@ void Configuration::updateDNSInfo(bool bakupInfo)
 #if 0
         {
             uint8_t priority = 0;
+            if(!conf.map.getLastValueString("DomainConf", "DomainPriority") ||
+                        !conf.map.getLastValueString("DomainConf", "DomainPriority") ||
+                        !conf.map.getLastValueString("DomainConf", "DomainDHCP") ||
+                        !conf.map.getLastValueString("DomainConf", "StaticDomainName"))
+            {
+                log<level::ERR>("Skipping host update due to missing values");
+                return -1;
+            }
             if ( *conf.map.getLastValueString("DomainConf", "DomainPriority") == "v4" ) {
                 priority = 1;
             } else if ( *conf.map.getLastValueString("DomainConf", "DomainPriority") == "v6" ) {
@@ -1282,6 +1298,13 @@ void Configuration::updateDNSInfo(bool bakupInfo)
                 conf.map.getValueStrings("Interfaces", "Linked");
             for (auto it = list.begin(); it != list.end(); it++)
             {
+                if(!conf.map.getLastValueString(*it, "DoNsupdate") ||
+                        !conf.map.getLastValueString(*it, "UseTSIG") ||
+                        !conf.map.getLastValueString(*it, "Do"))
+                {
+                    log<level::ERR>("Skipping host update due to missing values");
+                    return -1;
+                }
                 tmpInterface.push_back(std::make_tuple(
                     *it,
                     *conf.map.getLastValueString(*it, "DoNsupdate") == "true"
@@ -1342,6 +1365,7 @@ void Configuration::updateDNSInfo(bool bakupInfo)
             ddnsIface::useMDNS(mDNS);
         }
     }
+    return 0;
 }
 
 bool Configuration::sendNsupdateEnabled(bool value)
