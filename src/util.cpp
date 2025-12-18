@@ -327,22 +327,23 @@ std::tuple<std::string, uint8_t, uint8_t>
 std::string getIP6StaticRtrAddr(const config::Parser& config,
                                 const std::string& Router)
 {
-    std::string str{};
+    const std::string* ptr = nullptr;
 
     if (Router.compare("Router1") == 0)
     {
-        str = *config.map.getLastValueString("IPv6Router", "IPv6StaticRtrAddr");
+        ptr = config.map.getLastValueString("IPv6Router", "IPv6StaticRtrAddr");
     }
     else if (Router.compare("Router2") == 0)
     {
-        str = *config.map.getLastValueString("IPv6Router",
+        ptr = config.map.getLastValueString("IPv6Router",
                                              "IPv6StaticRtr2Addr");
     }
-    else{
-        str = "";
+    if (ptr != nullptr)
+    {
+        return *ptr;
     }
 
-    return str;
+    return "";
 }
 
 std::string getMAC(const config::Parser& config)
@@ -392,8 +393,12 @@ std::optional<std::tuple<bool, std::string, int>>
             {
                 return std::nullopt;
             }
-            std::string duplex = *config.map.getLastValueString("Link",
+            const std::string* ptr = config.map.getLastValueString("Link",
                                                                 "Duplex");
+            if(!ptr) return std::nullopt;
+
+            std::string duplex = *ptr;
+
             int speed = systemdParseLast(config, "Link", "Speed",
                                          config::parseInt)
                             .value_or(-1);
