@@ -625,6 +625,14 @@ void isValidIPv4Addr(in_addr* addr, Type type)
         {
             throw std::invalid_argument("IPv4 address cannot be in reserved range");
         }
+	else if ((hostAddr & 0xFF000000) == 0x7F000000) //127.0.0.0 - 127.255.255.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be loopback range");
+        }
+        else if ((hostAddr & 0xFFFF0000) == 0xA9FE0000) //169.254.0.0 - 169.254.255.255
+        {
+            throw std::invalid_argument("IPv4 address cannot be link-local range");
+        }
         else if ((hostAddr & 0xFFFFFF00) == 0xC0000000) //192.0.0.0 - 192.0.0.255
         {
             throw std::invalid_argument("IPv4 address cannot be in reserved range");
