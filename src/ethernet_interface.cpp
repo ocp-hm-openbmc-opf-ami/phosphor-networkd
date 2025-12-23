@@ -301,16 +301,6 @@ EthernetInterface::EthernetInterface(
     {
         addStaticNeigh(neigh);
     }
-#if ENABLE_BOND_SUPPORT
-    if (std::string mac = getMAC(config); (!mac.empty() && !info.intf.bondInfo))
-#else
-    if (std::string mac = getMAC(config); !mac.empty())
-#endif
-    {
-        system::setNICUp(interfaceName(), false);
-        MacAddressIntf::macAddress(mac, true);
-        manager.get().reconfigLink(ifIdx);
-    }
 
     signals = initSignals();
     registerSignal(bus);
@@ -377,14 +367,7 @@ void EthernetInterface::updateInfo(const InterfaceInfo& info, bool skipSignal)
 #endif
     config::Parser config(
         config::pathForIntfConf(manager.get().getConfDir(), interfaceName()));
-    if (std::string mac = getMAC(config);
-        !mac.empty() && MacAddressIntf::macAddress() != mac)
-    {
-        system::setNICUp(interfaceName(), false);
-        MacAddressIntf::macAddress(mac, true);
-        manager.get().reconfigLink(ifIdx);
-    }
-    else if (info.mac)
+    if (info.mac)
     {
         if (stdplus::toStr(*info.mac) != MacAddressIntf::macAddress() &&
             manager.get().initCompleted)
