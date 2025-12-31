@@ -212,8 +212,8 @@ class Parser
     fs::path filename;
     std::vector<std::string> warnings;
 
-    std::tuple<ReturnCode, KeyValueMapstr>
-        getSectionstr(const std::string& section);
+    std::tuple<ReturnCode, KeyValueMapstr> getSectionstr(
+        const std::string& section);
     std::unordered_map<Sectionstr, KeyValueMapstr> sections;
 };
 

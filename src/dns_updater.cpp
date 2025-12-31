@@ -104,8 +104,8 @@ std::map<std::string, std::unique_ptr<sdbusplus::bus::match_t>> signals;
 
 Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
                              Manager& parent) :
-    Iface(bus, path.c_str(), Iface::action::defer_emit),
-    bus(bus), manager(parent)
+    Iface(bus, path.c_str(), Iface::action::defer_emit), bus(bus),
+    manager(parent)
 {
     config::Parser conf;
 #if 0
@@ -185,15 +185,15 @@ void Configuration::registerSignal(sdbusplus::bus_t& bus)
                 sdbusplus::bus::match::rules::propertiesChanged(
                     DHCP_SERVICE_PATH, DHCP_PROP_INTERFACE),
                 [&](sdbusplus::message::message& msg) {
-                std::map<
-                    std::string,
-                    std::variant<std::string, std::vector<std::string>, bool>>
-                    props;
-                std::string iface;
-                bool value;
-                msg.read(iface, props);
-                for (const auto& t : props)
-                {
+                    std::map<std::string,
+                             std::variant<std::string, std::vector<std::string>,
+                                          bool>>
+                        props;
+                    std::string iface;
+                    bool value;
+                    msg.read(iface, props);
+                    for (const auto& t : props)
+                    {
 #if 0
                         if (t.first == "DomainEnabled")
                         {
@@ -219,8 +219,8 @@ void Configuration::registerSignal(sdbusplus::bus_t& bus)
                             }
                         }
 #endif
-                }
-            });
+                    }
+                });
         } // if
         else if (signal.second == nullptr &&
                  signal.first == "SystemconfigSignal")
@@ -230,36 +230,36 @@ void Configuration::registerSignal(sdbusplus::bus_t& bus)
                 sdbusplus::bus::match::rules::propertiesChanged(
                     SYSTEMCONF_SERVICE_PATH, SYSTEMCONF_PROP_INTERFACE),
                 [&](sdbusplus::message::message& msg) {
-                std::map<
-                    std::string,
-                    std::variant<std::string, std::vector<std::string>, bool>>
-                    props;
-                std::string iface;
-                std::string value;
-                msg.read(iface, props);
-                for (const auto& t : props)
-                {
-                    if (t.first == "HostName")
+                    std::map<std::string,
+                             std::variant<std::string, std::vector<std::string>,
+                                          bool>>
+                        props;
+                    std::string iface;
+                    std::string value;
+                    msg.read(iface, props);
+                    for (const auto& t : props)
                     {
-                        value = std::get<std::string>(t.second);
-                        hostConf(std::make_tuple(false, value));
-                        if (ddnsIface::useMDNS())
+                        if (t.first == "HostName")
                         {
+                            value = std::get<std::string>(t.second);
+                            hostConf(std::make_tuple(false, value));
+                            if (ddnsIface::useMDNS())
+                            {
 #if AVAHI_SUPPORT
-                            execute("/bin/systemctl", "systemctl", "restart",
-                                    "avahi-daemon");
-                            std::this_thread::sleep_for(
-                                std::chrono::seconds(1));
-                            execute("/bin/systemctl", "systemctl",
-                                    "reset-failed", "avahi-daemon");
+                                execute("/bin/systemctl", "systemctl",
+                                        "restart", "avahi-daemon");
+                                std::this_thread::sleep_for(
+                                    std::chrono::seconds(1));
+                                execute("/bin/systemctl", "systemctl",
+                                        "reset-failed", "avahi-daemon");
 #else
-			    log<level::ERR>(
-			        "AVAHI Support is not enabled..\n");
-#endif                    
-		    	}
+                                log<level::ERR>(
+                                    "AVAHI Support is not enabled..\n");
+#endif
+                            }
+                        }
                     }
-                }
-            });
+                });
         } // else if
         else if (signal.second == nullptr && signal.first == "BMCStateSignal")
         {
@@ -268,54 +268,56 @@ void Configuration::registerSignal(sdbusplus::bus_t& bus)
                 sdbusplus::bus::match::rules::propertiesChanged(
                     BMC_STATE_SERVICE_PATH, BMC_STATE_PROP_INTERFACE),
                 [&](sdbusplus::message::message& msg) {
-                std::map<
-                    std::string,
-                    std::variant<std::string, std::vector<std::string>, bool>>
-                    props;
-                std::string iface;
-                msg.read(iface, props);
-                for (const auto& t : props)
-                {
-                    if (t.first == "CurrentBMCState")
+                    std::map<std::string,
+                             std::variant<std::string, std::vector<std::string>,
+                                          bool>>
+                        props;
+                    std::string iface;
+                    msg.read(iface, props);
+                    for (const auto& t : props)
                     {
-                        sdbusplus::common::xyz::openbmc_project::state::BMC::
-                            BMCState state =
-                                sdbusplus::common::xyz::openbmc_project::state::
-                                    BMC::convertBMCStateFromString(
-                                        std::get<std::string>(t.second));
-                        if (state == sdbusplus::common::xyz::openbmc_project::
-                                         state::BMC::BMCState::Ready)
+                        if (t.first == "CurrentBMCState")
                         {
-                            // Reload Configuration for HOSTNAME chagend during BOOT
-                            // If not, DDNS may not work
-                            manager.get().addReloadPreHook(
-                            [&]() {
-                                // Wait for the information of interface ready
-                                // Since reloadConfig is async
-                                std::this_thread::sleep_for(std::chrono::seconds(5));
-                                toRegister();
-                            });
-                            manager.get().reloadConfigs();
-                            if (!std::filesystem::exists(DEFAULT_HOSTNAME_PATH))
+                            sdbusplus::common::xyz::openbmc_project::state::
+                                BMC::BMCState state =
+                                    sdbusplus::common::xyz::openbmc_project::
+                                        state::BMC::convertBMCStateFromString(
+                                            std::get<std::string>(t.second));
+                            if (state ==
+                                sdbusplus::common::xyz::openbmc_project::state::
+                                    BMC::BMCState::Ready)
                             {
-                                std::ofstream ofs;
-                                ofs.open(DEFAULT_HOSTNAME_PATH);
-                                if (ofs.is_open())
+                                // Reload Configuration for HOSTNAME chagend
+                                // during BOOT If not, DDNS may not work
+                                manager.get().addReloadPreHook([&]() {
+                                    // Wait for the information of interface
+                                    // ready Since reloadConfig is async
+                                    std::this_thread::sleep_for(
+                                        std::chrono::seconds(5));
+                                    toRegister();
+                                });
+                                manager.get().reloadConfigs();
+                                if (!std::filesystem::exists(
+                                        DEFAULT_HOSTNAME_PATH))
                                 {
-                                    ofs << manager.get()
-                                               .getSystemConf()
-                                               .hostName();
-                                    ofs.close();
-                                    hostConf(std::make_tuple(
-                                        true, manager.get()
-                                                  .getSystemConf()
-                                                  .hostName()));
+                                    std::ofstream ofs;
+                                    ofs.open(DEFAULT_HOSTNAME_PATH);
+                                    if (ofs.is_open())
+                                    {
+                                        ofs << manager.get()
+                                                   .getSystemConf()
+                                                   .hostName();
+                                        ofs.close();
+                                        hostConf(std::make_tuple(
+                                            true, manager.get()
+                                                      .getSystemConf()
+                                                      .hostName()));
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
         }
     }
 }
@@ -377,7 +379,8 @@ int16_t Configuration::toDeregister()
         return -1;
     }
 
-    if(updateDNSInfo(true) == -1) return -1;
+    if (updateDNSInfo(true) == -1)
+        return -1;
     auto [setting, hostname] = preHost;
     for (auto it = preIfaceConf.begin(); it != preIfaceConf.end(); it++)
     {
@@ -463,10 +466,10 @@ int16_t Configuration::toDeregister()
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
                     lg2::info(cmd.c_str());
-                    bool ipv6 = ip.find(":") == std::string::npos ? false
-                                                                  : true;
-                    std::string revIP = ipv6 == true ? getRevIPv6(ip)
-                                                     : getRevIPv4(ip);
+                    bool ipv6 =
+                        ip.find(":") == std::string::npos ? false : true;
+                    std::string revIP =
+                        ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
                     cmd = fmt::format("update delete {}.{} {}\n", hostname,
                                       domainName, ipv6 ? "AAAA" : "A");
                     lg2::info(cmd.c_str());
@@ -561,8 +564,8 @@ int16_t Configuration::toRegister()
                 for (auto& addr : iface->second->addrs)
                 {
                     std::string ip = stdplus::toStr(addr.first);
-                    bool ipv6 = ip.find(":") == std::string::npos ? false
-                                                                  : true;
+                    bool ipv6 =
+                        ip.find(":") == std::string::npos ? false : true;
                     auto index = ip.find_first_of("/");
                     ip.assign(ip.begin(), ip.begin() + index);
                     if (ipv6)
@@ -590,8 +593,8 @@ int16_t Configuration::toRegister()
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
                     lg2::info(cmd.c_str());
-                    std::string revIP = ipv6 == true ? getRevIPv6(ip)
-                                                     : getRevIPv4(ip);
+                    std::string revIP =
+                        ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
                     cmd = fmt::format("update add {} {} PTR {}.{}\n", revIP,
                                       TTL, hostname, domainName);
                     // There must be a blank line between PTR and A/AAAA record
@@ -630,7 +633,7 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
         }
         else
         {
-	    std::getline(inStream, hostname);
+            std::getline(inStream, hostname);
             std::fstream inStream(CURRENT_MAC_PATH, std::fstream::in);
             if (!inStream.is_open())
             {
@@ -641,8 +644,9 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
             else
             {
                 std::getline(inStream, hw_mac);
-                hw_mac.erase(std::remove(hw_mac.begin(), hw_mac.end(), ':'), hw_mac.end());
-                hostname =  "AMIOT-" + hw_mac;
+                hw_mac.erase(std::remove(hw_mac.begin(), hw_mac.end(), ':'),
+                             hw_mac.end());
+                hostname = "AMIOT-" + hw_mac;
                 std::string cmd = "hostnamectl set-hostname " + hostname;
                 int result = std::system(cmd.c_str());
                 inStream.close();
@@ -671,7 +675,7 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
             hostname = hostName;
             different = true;
         } // if
-    }     // else if
+    } // else if
 
     if (different)
     {
@@ -689,7 +693,7 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                 it->second->interfaceName().find_first_of("eth") !=
                     std::string::npos)
                 manager.get().reconfigLink(it->second->getIfIdx());
-                std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         toRegister();
     }
@@ -701,8 +705,7 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
         std::this_thread::sleep_for(std::chrono::seconds(1));
         execute("/bin/systemctl", "systemctl", "reset-failed", "avahi-daemon");
 #else
-        log<level::ERR>(
-            "AVAHI Support is not enabled..\n");
+        log<level::ERR>("AVAHI Support is not enabled..\n");
 #endif
     }
 
@@ -715,16 +718,15 @@ int16_t Configuration::setInterfacesConf(
     for (auto it = interfaceConf.begin(); it != interfaceConf.end(); it++)
     {
         auto [interface, doNsupdate, tsig, method] = (*it);
-            
-	if(tsig == true)
+
+        if (tsig == true)
         {
-#if !TSIG_SUPPORT		 
-	      log<level::ERR>(
-                  "TSIG support is not enabled..\n");
-              elog<UnsupportedRequest>(
-                  Unsupported::REASON("TSIG support is not enabled..\n"));        
+#if !TSIG_SUPPORT
+            log<level::ERR>("TSIG support is not enabled..\n");
+            elog<UnsupportedRequest>(
+                Unsupported::REASON("TSIG support is not enabled..\n"));
 #endif
-	 }
+        }
         if (manager.get().interfaces.find(interface) ==
             manager.get().interfaces.end())
         {
@@ -805,7 +807,7 @@ int16_t Configuration::setDNSServer(std::string interface,
                            "IPADDRESS", ipaddress);
                 return -1;
             }
-	    stdplus::fromStr<stdplus::InAnyAddr>(ipaddress);
+            stdplus::fromStr<stdplus::InAnyAddr>(ipaddress);
         }
         catch (std::invalid_argument e)
         {
@@ -813,23 +815,24 @@ int16_t Configuration::setDNSServer(std::string interface,
                        "IPADDRESS", ipaddress);
             return -1;
         }
-	catch (const std::exception& e)
+        catch (const std::exception& e)
         {
-            lg2::error("Invalid IP `{IPADDRESS}`: {ERROR}\n",
-                       "IPADDRESS", ipaddress, "ERROR", e.what());
+            lg2::error("Invalid IP `{IPADDRESS}`: {ERROR}\n", "IPADDRESS",
+                       ipaddress, "ERROR", e.what());
             return -1;
         }
     }
-    try{
-	auto result = iface->second->staticNameServers(servers);
-    	if (servers.size() == 0 && result.size() == 0)
-   	{
+    try
+    {
+        auto result = iface->second->staticNameServers(servers);
+        if (servers.size() == 0 && result.size() == 0)
+        {
             writeConfigurationFile();
             return 0;
-    	}
-    	else if (result.size() == 0)
-    	{
-           return -1;
+        }
+        else if (result.size() == 0)
+        {
+            return -1;
         }
         writeConfigurationFile();
 
@@ -837,13 +840,17 @@ int16_t Configuration::setDNSServer(std::string interface,
     }
     catch (const sdbusplus::exception::SdBusError& e)
     {
-        lg2::error("D-Bus error while setting DNS servers: {ERROR}", "ERROR", e);
+        lg2::error("D-Bus error while setting DNS servers: {ERROR}", "ERROR",
+                   e);
         auto dbusError = e.get_error();
         if ((dbusError != nullptr) &&
-            ((strcmp(dbusError->name, "org.freedesktop.DBus.Error.Disconnected") == 0) ||
-             (strcmp(dbusError->name, "org.freedesktop.DBus.Error.NoReply") == 0)))
+            ((strcmp(dbusError->name,
+                     "org.freedesktop.DBus.Error.Disconnected") == 0) ||
+             (strcmp(dbusError->name, "org.freedesktop.DBus.Error.NoReply") ==
+              0)))
         {
-            lg2::error("Remote peer disconnected error detected in setDNSServer");
+            lg2::error(
+                "Remote peer disconnected error detected in setDNSServer");
         }
         return -1;
     }
@@ -878,8 +885,8 @@ bool Configuration::dnsEnabled(bool value) {
 }
 #endif
 
-std::tuple<bool, std::string>
-    Configuration::hostConf(std::tuple<bool, std::string> value)
+std::tuple<bool, std::string> Configuration::hostConf(
+    std::tuple<bool, std::string> value)
 {
     auto [hostSetting, hostName] = value;
     ddnsIface::hostConf(value);
@@ -1119,8 +1126,7 @@ bool Configuration::useMDNS(bool value)
 
     return value;
 #else
-    log<level::ERR>(
-        "AVAHI Support is not enabled..\n");
+    log<level::ERR>("AVAHI Support is not enabled..\n");
     elog<UnsupportedRequest>(
         Unsupported::REASON("AVAHI support is not enabled..\n"));
 #endif
@@ -1181,13 +1187,13 @@ void Configuration::writeConfigurationFile()
             ifConf["Do"].emplace_back(method == ddnsIface::Method::Register
                                           ? "Register"
                                           : "De-Register");
-            ifConf["DoNsupdate"].emplace_back(doNsupdate == true ? "true"
-                                                                 : "false");
+            ifConf["DoNsupdate"].emplace_back(
+                doNsupdate == true ? "true" : "false");
 #if TSIG_SUPPORT
             ifConf["UseTSIG"].emplace_back(tsig == true ? "true" : "false");
 #else
             ifConf["UseTSIG"].emplace_back("false");
-#endif                                 
+#endif
             if (auto names = getDomainName(interface); (int)names.size() > 0)
             {
                 for (auto& name : names)
@@ -1253,10 +1259,10 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
 
     if (fs::exists(filePath))
     {
-        if(!conf.map.getLastValueString("HostConf", "Automatic") ||
-			!conf.map.getLastValueString("HostConf", "Hostname") ||
-			!conf.map.getLastValueString("mDNS", "UseMDNS") ||
-			!conf.map.getLastValueString("DDNS", "SendNsupdate"))
+        if (!conf.map.getLastValueString("HostConf", "Automatic") ||
+            !conf.map.getLastValueString("HostConf", "Hostname") ||
+            !conf.map.getLastValueString("mDNS", "UseMDNS") ||
+            !conf.map.getLastValueString("DDNS", "SendNsupdate"))
         {
             log<level::ERR>("Skipping host update due to missing values");
             return -1;
@@ -1298,11 +1304,12 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
                 conf.map.getValueStrings("Interfaces", "Linked");
             for (auto it = list.begin(); it != list.end(); it++)
             {
-                if(!conf.map.getLastValueString(*it, "DoNsupdate") ||
-                        !conf.map.getLastValueString(*it, "UseTSIG") ||
-                        !conf.map.getLastValueString(*it, "Do"))
+                if (!conf.map.getLastValueString(*it, "DoNsupdate") ||
+                    !conf.map.getLastValueString(*it, "UseTSIG") ||
+                    !conf.map.getLastValueString(*it, "Do"))
                 {
-                    log<level::ERR>("Skipping host update due to missing values");
+                    log<level::ERR>(
+                        "Skipping host update due to missing values");
                     return -1;
                 }
                 tmpInterface.push_back(std::make_tuple(
@@ -1337,8 +1344,8 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
                 bool doNsupdate, tsig;
                 Method method;
                 std::tie(iName, doNsupdate, tsig, method) = (*it);
-                std::vector<std::string> list = conf.map.getValueStrings(iName,
-                                                                         "DNS");
+                std::vector<std::string> list =
+                    conf.map.getValueStrings(iName, "DNS");
                 preDns.push_back(std::make_tuple(iName, list));
                 list = conf.map.getValueStrings(iName, "IP");
                 preIPAddr.push_back(std::make_tuple(iName, list));

@@ -6,8 +6,9 @@
 #include "system_queries.hpp"
 #include "types.hpp"
 
-#include <sys/wait.h>
 #include <arpa/inet.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/lg2.hpp>
@@ -16,18 +17,17 @@
 #include <stdplus/str/cat.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 
+#include <array>
 #include <cctype>
+#include <cstdio>
+#include <iostream>
+#include <memory>
+#include <regex>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unistd.h>
-#include <iostream>
-#include <cstdio>
-#include <memory>
-#include <stdexcept>
-#include <array>
-#include <sstream>
 #include <vector>
-#include <regex>
 
 namespace phosphor
 {
@@ -97,8 +97,8 @@ std::string_view getIgnoredInterfacesEnv()
 }
 
 /** @brief Parse the comma separated interface names */
-std::unordered_set<std::string_view>
-    parseInterfaces(std::string_view interfaces)
+std::unordered_set<std::string_view> parseInterfaces(
+    std::string_view interfaces)
 {
     std::unordered_set<std::string_view> result;
     while (true)
@@ -141,13 +141,15 @@ int runSystemCommand(const char* cmd, const std::string& params)
     std::vector<std::string> paramList;
     std::string param;
 
-    while (iss >> param) {
+    while (iss >> param)
+    {
         paramList.push_back(param);
     }
 
     std::vector<const char*> args;
     args.push_back(cmd);
-    for (const auto& p : paramList) {
+    for (const auto& p : paramList)
+    {
         args.push_back(p.c_str());
     }
     args.push_back(nullptr);
@@ -171,35 +173,46 @@ int runSystemCommand(const char* cmd, const std::string& params)
     return status;
 }
 
-std::string runCommandAndStoreLog(const char* cmd) {
+std::string runCommandAndStoreLog(const char* cmd)
+{
     std::array<char, 128> buffer;
     std::string result;
 
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
+    if (!pipe)
+    {
         throw std::runtime_error("popen() failed!");
     }
 
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+    {
         result += buffer.data();
     }
 
     return result;
 }
 
-void executeCommandAndLog(const char* command, const char* logFilePath) {
-    try {
+void executeCommandAndLog(const char* command, const char* logFilePath)
+{
+    try
+    {
         std::string output = runCommandAndStoreLog(command);
 
         FILE* logFile = fopen(logFilePath, "w");
-        if (logFile) {
+        if (logFile)
+        {
             fputs(output.c_str(), logFile);
             fclose(logFile);
             std::cout << "Log written to " << logFilePath << std::endl;
-        } else {
-            std::cerr << "Failed to open log file: " << logFilePath << std::endl;
         }
-    } catch (const std::exception& e) {
+        else
+        {
+            std::cerr << "Failed to open log file: " << logFilePath
+                      << std::endl;
+        }
+    }
+    catch (const std::exception& e)
+    {
         std::cerr << "Error: " << e.what() << std::endl;
     }
 }
@@ -305,15 +318,15 @@ bool getIP6StaticRtr(const config::Parser& config)
         .value_or(false);
 }
 
-std::tuple<std::string, uint8_t, uint8_t>
-    getNCSIValue(const config::Parser& config)
+std::tuple<std::string, uint8_t, uint8_t> getNCSIValue(
+    const config::Parser& config)
 {
-    uint8_t channel = systemdParseLast(config, "NCSI", "Channel",
-                                       config::parseInt)
-                          .value_or(31);
-    uint8_t package = systemdParseLast(config, "NCSI", "Package",
-                                       config::parseInt)
-                          .value_or(8);
+    uint8_t channel =
+        systemdParseLast(config, "NCSI", "Channel", config::parseInt)
+            .value_or(31);
+    uint8_t package =
+        systemdParseLast(config, "NCSI", "Package", config::parseInt)
+            .value_or(8);
     std::string mode = "Auto";
     if (auto str = config.map.getLastValueString("NCSI", "Mode");
         str != nullptr)
@@ -335,8 +348,7 @@ std::string getIP6StaticRtrAddr(const config::Parser& config,
     }
     else if (Router.compare("Router2") == 0)
     {
-        ptr = config.map.getLastValueString("IPv6Router",
-                                             "IPv6StaticRtr2Addr");
+        ptr = config.map.getLastValueString("IPv6Router", "IPv6StaticRtr2Addr");
     }
     if (ptr != nullptr)
     {
@@ -380,28 +392,29 @@ int getIP6StaticRtrPrefix(const config::Parser& config,
     return val;
 }
 
-std::optional<std::tuple<bool, std::string, int>>
-    getPHYInfo(const config::Parser& config)
+std::optional<std::tuple<bool, std::string, int>> getPHYInfo(
+    const config::Parser& config)
 {
     if (config.getFileExists())
     {
         try
         {
-            auto autoNeg = systemdParseLast(config, "Link", "AutoNeg",
-                                            config::parseBool);
+            auto autoNeg =
+                systemdParseLast(config, "Link", "AutoNeg", config::parseBool);
             if (!autoNeg.has_value() || autoNeg.value())
             {
                 return std::nullopt;
             }
-            const std::string* ptr = config.map.getLastValueString("Link",
-                                                                "Duplex");
-            if(!ptr) return std::nullopt;
+            const std::string* ptr =
+                config.map.getLastValueString("Link", "Duplex");
+            if (!ptr)
+                return std::nullopt;
 
             std::string duplex = *ptr;
 
-            int speed = systemdParseLast(config, "Link", "Speed",
-                                         config::parseInt)
-                            .value_or(-1);
+            int speed =
+                systemdParseLast(config, "Link", "Speed", config::parseInt)
+                    .value_or(-1);
             return std::make_tuple(autoNeg.value(), duplex, speed);
         }
         catch (const std::exception& e)
@@ -501,16 +514,18 @@ std::tuple<std::vector<std::optional<std::string>>,
     return std::make_tuple(ipv4List, ipv6List);
 }
 
-std::unordered_map<uint32_t, std::string> getDHCPVendorOption(const config::Parser& config, DHCPType dhcpType)
+std::unordered_map<uint32_t, std::string> getDHCPVendorOption(
+    const config::Parser& config, DHCPType dhcpType)
 {
-    auto list = config.map.getValueStrings(dhcpType == DHCPType::v4 ? "DHCPv4" : "DHCPv6", "SendVendorOption");
+    auto list = config.map.getValueStrings(
+        dhcpType == DHCPType::v4 ? "DHCPv4" : "DHCPv6", "SendVendorOption");
     std::unordered_map<uint32_t, std::string> map;
     for (const auto& v : list)
     {
         auto elements = splitStr(v, ":");
-        map.insert(std::pair<uint32_t, std::string>(std::stol(elements.at(0)), elements.at(2)));
+        map.insert(std::pair<uint32_t, std::string>(std::stol(elements.at(0)),
+                                                    elements.at(2)));
         // map[e.at(0).c_str()] = e.at(2);
-
     }
 
     return std::move(map);
@@ -518,7 +533,8 @@ std::unordered_map<uint32_t, std::string> getDHCPVendorOption(const config::Pars
 
 std::string getDHCPVendorClassIdentifier(const config::Parser& config)
 {
-    if (auto str = config.map.getLastValueString("DHCPv4", "VendorClassIdentifier");
+    if (auto str =
+            config.map.getLastValueString("DHCPv4", "VendorClassIdentifier");
         str == nullptr)
     {
         return "";
@@ -611,58 +627,78 @@ void isValidIPv4Addr(in_addr* addr, Type type)
         {
             throw std::invalid_argument("Gateway starts with 0.");
         } // if
-    }     // if
+    } // if
     else if (type == Type::IP4_ADDRESS)
     {
-	
         if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0)
         {
             throw std::invalid_argument("IPv4 address is 0.0.0.0");
         } // if
-        uint32_t hostAddr = (ip[0] << 24) | (ip[1] << 16) | (ip[2] << 8) | ip[3];
+        uint32_t hostAddr = (ip[0] << 24) | (ip[1] << 16) | (ip[2] << 8) |
+                            ip[3];
 
-        if ((hostAddr & 0xFF000000) == 0x00000000) //0.0.0.0 - 0.255.255.255
+        if ((hostAddr & 0xFF000000) == 0x00000000) // 0.0.0.0 - 0.255.255.255
         {
-            throw std::invalid_argument("IPv4 address cannot be in reserved range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be in reserved range");
         }
-	else if ((hostAddr & 0xFF000000) == 0x7F000000) //127.0.0.0 - 127.255.255.255
+        else if ((hostAddr & 0xFF000000) ==
+                 0x7F000000) // 127.0.0.0 - 127.255.255.255
         {
-            throw std::invalid_argument("IPv4 address cannot be loopback range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be loopback range");
         }
-        else if ((hostAddr & 0xFFFF0000) == 0xA9FE0000) //169.254.0.0 - 169.254.255.255
+        else if ((hostAddr & 0xFFFF0000) ==
+                 0xA9FE0000) // 169.254.0.0 - 169.254.255.255
         {
-            throw std::invalid_argument("IPv4 address cannot be link-local range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be link-local range");
         }
-        else if ((hostAddr & 0xFFFFFF00) == 0xC0000000) //192.0.0.0 - 192.0.0.255
+        else if ((hostAddr & 0xFFFFFF00) ==
+                 0xC0000000) // 192.0.0.0 - 192.0.0.255
         {
-            throw std::invalid_argument("IPv4 address cannot be in reserved range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be in reserved range");
         }
-        else if ((hostAddr & 0xFFFFFF00) == 0xC0000200) //192.0.2.0 - 192.0.2.255
+        else if ((hostAddr & 0xFFFFFF00) ==
+                 0xC0000200) // 192.0.2.0 - 192.0.2.255
         {
-            throw std::invalid_argument("IPv4 address cannot be in documentation range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be in documentation range");
         }
-        else if ((hostAddr & 0xFFFE0000) == 0xC6120000) //198.18.0.0 - 198.19.255.255
+        else if ((hostAddr & 0xFFFE0000) ==
+                 0xC6120000) // 198.18.0.0 - 198.19.255.255
         {
-            throw std::invalid_argument("IPv4 address cannot be in benchmark range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be in benchmark range");
         }
-        else if ((hostAddr & 0xFFFFFF00) == 0xC6336400) //198.51.100.0 - 198.51.100.255
+        else if ((hostAddr & 0xFFFFFF00) ==
+                 0xC6336400) // 198.51.100.0 - 198.51.100.255
         {
-            throw std::invalid_argument("IPv4 address cannot be in documentation range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be in documentation range");
         }
-        else if ((hostAddr & 0xFFFFFF00) == 0xCB007100) //203.0.113.0 - 203.0.113.255
+        else if ((hostAddr & 0xFFFFFF00) ==
+                 0xCB007100) // 203.0.113.0 - 203.0.113.255
         {
-            throw std::invalid_argument("IPv4 address cannot be in documentation range");
-	}
-        else if ((hostAddr & 0xF0000000) == 0xE0000000) //224.0.0.0 - 239.255.255.255
-	{
-            throw std::invalid_argument("IPv4 address cannot be multicast range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be in documentation range");
         }
-        else if ((hostAddr & 0xF0000000) == 0xF0000000) //240.0.0.0 - 255.255.255.255
+        else if ((hostAddr & 0xF0000000) ==
+                 0xE0000000) // 224.0.0.0 - 239.255.255.255
         {
-            throw std::invalid_argument("IPv4 address cannot be in reserved range");
+            throw std::invalid_argument(
+                "IPv4 address cannot be multicast range");
+        }
+        else if ((hostAddr & 0xF0000000) ==
+                 0xF0000000) // 240.0.0.0 - 255.255.255.255
+        {
+            throw std::invalid_argument(
+                "IPv4 address cannot be in reserved range");
         }
         std::string addrStr = inet_ntoa(*addr);
-        std::regex ipv4Pattern(R"(^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$)");
+        std::regex ipv4Pattern(
+            R"(^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$)");
         std::smatch match;
         if (!std::regex_match(addrStr, match, ipv4Pattern))
         {
@@ -677,15 +713,17 @@ void isValidIPv4Addr(in_addr* addr, Type type)
             }
             if (octetStr.length() > 1 && octetStr[0] == '0')
             {
-                throw std::invalid_argument("Invalid IPv4 address, cannot have leading zeros");
+                throw std::invalid_argument(
+                    "Invalid IPv4 address, cannot have leading zeros");
             }
             int octet = std::stoi(octetStr);
             if (octet < 0 || octet > 255)
             {
-                throw std::invalid_argument("Invalid IPv4 address given. Out of range (0-255)");
+                throw std::invalid_argument(
+                    "Invalid IPv4 address given. Out of range (0-255)");
             }
         }
-    }     // else if
+    } // else if
 }
 
 void isValidIPv6Addr(std::string addr, Type type)
@@ -741,7 +779,8 @@ void isValidIPv6Addr(in6_addr* addr, Type type)
     }
     else if ((stdplus::ntoh(*(uint32_t*)addr) & 0xFFFFFFFF) == 0x20010db8)
     {
-        throw std::invalid_argument("IPv6 address cannot be in documentation range");
+        throw std::invalid_argument(
+            "IPv6 address cannot be in documentation range");
     }
 }
 

@@ -140,7 +140,8 @@ class Configuration : Iface
      *
      *  @return result[int16_t] -
      */
-    int16_t reorderRules(IP ip, std::vector<IPTableElementTuple> rules) override;
+    int16_t reorderRules(IP ip,
+                         std::vector<IPTableElementTuple> rules) override;
 
     int16_t addRuleDetailSteps(
         FirewallIface::Target target, uint8_t control,

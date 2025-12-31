@@ -1,25 +1,27 @@
 #pragma once
+#include "types.hpp"
+#include "xyz/openbmc_project/Network/IP/Create/server.hpp"
+
 #include <nlohmann/json.hpp>
+#include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/bus/match.hpp>
-#include <sdbusplus/server/object.hpp>
 #include <sdbusplus/sdbus.hpp>
 #include <sdbusplus/server/interface.hpp>
+#include <sdbusplus/server/object.hpp>
 #include <sdbusplus/vtable.hpp>
 #include <stdplus/pinned.hpp>
 #include <stdplus/str/maps.hpp>
 #include <stdplus/zstring_view.hpp>
-#include <xyz/openbmc_project/Network/MACAddress/server.hpp>
-#include "xyz/openbmc_project/Network/IP/Create/server.hpp"
-#include <xyz/openbmc_project/Network/IP/server.hpp>
+#include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Network/ARPControl/server.hpp>
+#include <xyz/openbmc_project/Network/IP/server.hpp>
+#include <xyz/openbmc_project/Network/MACAddress/server.hpp>
+
+#include <memory>
 #include <string>
 #include <unordered_map>
-#include "types.hpp"
-#include <memory>
-#include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/lg2.hpp>
-#include <xyz/openbmc_project/Common/error.hpp>
 
 namespace phosphor
 {
@@ -58,9 +60,9 @@ class HostIPAddress : public hostIPIfaces
      *  @param[in] origin - origin of ipaddress(static/LinkLocal).
      */
     HostIPAddress(sdbusplus::bus_t& bus, std::string_view objRoot,
-              stdplus::PinnedRef<HostInterface> parent,
-              stdplus::SubnetAny addr, IP::AddressOrigin origin, uint8_t idx);
-
+                  stdplus::PinnedRef<HostInterface> parent,
+                  stdplus::SubnetAny addr, IP::AddressOrigin origin,
+                  uint8_t idx);
 
     ~HostIPAddress() = default;
 
@@ -86,23 +88,21 @@ class HostIPAddress : public hostIPIfaces
     }
 
   private:
-
     /** @brief Parent Object. */
     stdplus::PinnedRef<HostInterface> parent;
 
     /** @brief Dbus object path */
     sdbusplus::message::object_path objPath;
 
-    HostIPAddress(sdbusplus::bus_t& bus, sdbusplus::message::object_path objPath,
-              stdplus::PinnedRef<HostInterface> parent,
-              stdplus::SubnetAny addr, IP::AddressOrigin origin, uint8_t idx);
-
+    HostIPAddress(sdbusplus::bus_t& bus,
+                  sdbusplus::message::object_path objPath,
+                  stdplus::PinnedRef<HostInterface> parent,
+                  stdplus::SubnetAny addr, IP::AddressOrigin origin,
+                  uint8_t idx);
 };
-
 
 class HostInterface : public hostIfaces
 {
-
   public:
     /** @brief Constructor to put object onto bus at a dbus path.
      *  @param[in] bus - Bus to attach to.
@@ -118,7 +118,9 @@ class HostInterface : public hostIfaces
 
     std::string macAddress(std::string value) override;
 
-    std::unordered_map<stdplus::SubnetAny, std::unique_ptr<hostintf::HostIPAddress>> addrs;
+    std::unordered_map<stdplus::SubnetAny,
+                       std::unique_ptr<hostintf::HostIPAddress>>
+        addrs;
 
     void addAddr(const AddressInfo& info);
 
@@ -126,12 +128,12 @@ class HostInterface : public hostIfaces
 
     std::string InterfaceName() const
     {
-      return std::string(intfName);
+        return std::string(intfName);
     }
 
     uint8_t getifindex() const
     {
-      return ifindex;
+        return ifindex;
     }
 
     bool arpResponse(bool value) override;
@@ -143,10 +145,10 @@ class HostInterface : public hostIfaces
     using MacAddressIntf::macAddress;
 
   private:
-
     static constexpr const char HOST_INTERFACE_CONF_DIR[] = "/etc/interface";
     static constexpr const char* intfName = "hostusb0";
-    static constexpr const char* ethIntf = "xyz.openbmc_project.Network.EthernetInterface";
+    static constexpr const char* ethIntf =
+        "xyz.openbmc_project.Network.EthernetInterface";
 
     const bool dhcp4 = false;
     const std::string defaultGateway = "";
@@ -169,7 +171,9 @@ class HostInterface : public hostIfaces
 
     static const sdbusplus::vtable::vtable_t vtable[];
 
-    int configureHostInterface(const std::string &ipaddress, const uint8_t prefixLength, const uint8_t ifindex);
+    int configureHostInterface(const std::string& ipaddress,
+                               const uint8_t prefixLength,
+                               const uint8_t ifindex);
 
     void createEthernetInterface();
 
@@ -178,42 +182,39 @@ class HostInterface : public hostIfaces
     /**
      * Systemd bus callback for getting property
      */
-    static int _callback_get_interface_name(sd_bus* bus, const char* path,
-                                const char* interface, const char* property,
-                                sd_bus_message* msg, void* context,
-                                sd_bus_error* error);
+    static int _callback_get_interface_name(
+        sd_bus* bus, const char* path, const char* interface,
+        const char* property, sd_bus_message* msg, void* context,
+        sd_bus_error* error);
 
     static int _callback_get_dhcp4(sd_bus* bus, const char* path,
-                                const char* interface, const char* property,
-                                sd_bus_message* msg, void* context,
-                                sd_bus_error* error);
+                                   const char* interface, const char* property,
+                                   sd_bus_message* msg, void* context,
+                                   sd_bus_error* error);
 
-    static int _callback_get_default_gateway(sd_bus* bus, const char* path,
-                                const char* interface, const char* property,
-                                sd_bus_message* msg, void* context,
-                                sd_bus_error* error);
+    static int _callback_get_default_gateway(
+        sd_bus* bus, const char* path, const char* interface,
+        const char* property, sd_bus_message* msg, void* context,
+        sd_bus_error* error);
 
-    static int _callback_get_backup_gateway(sd_bus* bus, const char* path,
-                                const char* interface, const char* property,
-                                sd_bus_message* msg, void* context,
-                                sd_bus_error* error);
+    static int _callback_get_backup_gateway(
+        sd_bus* bus, const char* path, const char* interface,
+        const char* property, sd_bus_message* msg, void* context,
+        sd_bus_error* error);
 
-    static int _callback_get_backup_gateway_mac_address(sd_bus* bus, const char* path,
-                                const char* interface, const char* property,
-                                sd_bus_message* msg, void* context,
-                                sd_bus_error* error);
+    static int _callback_get_backup_gateway_mac_address(
+        sd_bus* bus, const char* path, const char* interface,
+        const char* property, sd_bus_message* msg, void* context,
+        sd_bus_error* error);
 
-
-    static int _callback_get_nic_enabled(sd_bus* bus, const char* path,
-                                const char* interface, const char* property,
-                                sd_bus_message* msg, void* context,
-                                sd_bus_error* error);
-
+    static int _callback_get_nic_enabled(
+        sd_bus* bus, const char* path, const char* interface,
+        const char* property, sd_bus_message* msg, void* context,
+        sd_bus_error* error);
 };
 
-}
+} // namespace hostintf
 
-}
+} // namespace network
 
-}
-
+} // namespace phosphor

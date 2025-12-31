@@ -8,8 +8,8 @@
 #if ENABLE_BOND_SUPPORT
 #include "xyz/openbmc_project/Network/Bond/Create/server.hpp"
 #endif
-#include "xyz/openbmc_project/Network/VLAN/Create/server.hpp"
 #include "host_interface.hpp"
+#include "xyz/openbmc_project/Network/VLAN/Create/server.hpp"
 
 #include <function2/function2.hpp>
 #include <sdbusplus/bus.hpp>
@@ -177,7 +177,8 @@ class Manager : public ManagerIface
 
     /** @brief HostInterface dbus objects and their names
      */
-    std::unique_ptr<phosphor::network::hostintf::HostInterface> hostIntf = nullptr;
+    std::unique_ptr<phosphor::network::hostintf::HostInterface> hostIntf =
+        nullptr;
 
     /** @brief Adds a hook that runs immediately prior to reloading
      *

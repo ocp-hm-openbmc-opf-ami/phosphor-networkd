@@ -251,8 +251,8 @@ class EthernetInterface : public Ifaces
                         uint8_t prefixLength) override;
 
     /** Set value of DomainName */
-    std::vector<std::string>
-        domainName(std::vector<std::string> value) override;
+    std::vector<std::string> domainName(
+        std::vector<std::string> value) override;
 
     /** Set value of DHCPEnabled */
     DHCPConf dhcpEnabled() const override;
@@ -361,7 +361,8 @@ class EthernetInterface : public Ifaces
      *
      *  @return result[int16_t] -
      */
-    int16_t setPHYConfiguration(bool autoNeg, Duplex duplex, uint32_t speed) override;
+    int16_t setPHYConfiguration(bool autoNeg, Duplex duplex,
+                                uint32_t speed) override;
 
     /** @brief Function to reload network configurations.
      */
@@ -387,8 +388,8 @@ class EthernetInterface : public Ifaces
     /** @brief set the Default Gateway MAC Addess.
      *  @param[in] gateway - Gateway4 address.
      */
-    std::tuple<std::optional<std::string>, uint8_t>
-        getDwMacAddrByIP(std::string gateway);
+    std::tuple<std::optional<std::string>, uint8_t> getDwMacAddrByIP(
+        std::string gateway);
 
     /** Set value of LinkLocalAutoConf */
     LinkLocalConf linkLocalAutoConf(LinkLocalConf value) override;
@@ -433,23 +434,23 @@ class EthernetInterface : public Ifaces
     std::string dhcpv6DUID() const override;
 
     /** Set value of DHCPv6TimingConfParam */
-    std::vector<uint8_t>
-        dhcpv6TimingConfParam(std::vector<uint8_t> value) override;
+    std::vector<uint8_t> dhcpv6TimingConfParam(
+        std::vector<uint8_t> value) override;
 
     /** Parse dhcpv6 timing param to write to network config file */
     void dhcpv6TimingParamWriteConfFile(config::Parser& config);
 
     /** Read dhcpv6 timing param from iface config file */
-    std::vector<uint8_t>
-        dhcpv6TimingParamReadIfaceFile(const config::Parser& config);
+    std::vector<uint8_t> dhcpv6TimingParamReadIfaceFile(
+        const config::Parser& config);
 
     /** Set value of IPv6SLAACTimingConfParam */
-    std::vector<uint8_t>
-        ipv6SLAACTimingConfParam(std::vector<uint8_t> value) override;
+    std::vector<uint8_t> ipv6SLAACTimingConfParam(
+        std::vector<uint8_t> value) override;
 
     /** Read slaac timing param from iface config file */
-    std::vector<uint8_t>
-        slaacTimingParamReadIfaceFile(const config::Parser& config);
+    std::vector<uint8_t> slaacTimingParamReadIfaceFile(
+        const config::Parser& config);
 
     /** @brief sets the channel maxium privilege.
      *  @param[in] value - Channel privilege which needs to be set on the
@@ -548,17 +549,17 @@ class EthernetInterface : public Ifaces
 
   private:
     std::unique_ptr<std::thread> vlanMonitorThread;
-    
+
     std::mutex vlanMutex;
 
     std::atomic<bool> vlanMonitorActive{true};
-   
+
     void startVlanMonitorThread();
-    
+
     void monitorVlanInterface();
 
     void reregisterSignals();
-   
+
     EthernetInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
                       stdplus::PinnedRef<Manager> manager,
                       const AllIntfInfo& info, std::string&& objPath,
@@ -568,7 +569,8 @@ class EthernetInterface : public Ifaces
      *  @param[in] origin - The origin entry of the IP::Address
      *  @returns true/false value if the address is static
      */
-    bool originIsManuallyAssigned(IP::AddressOrigin origin, IP::Protocol family);
+    bool originIsManuallyAssigned(IP::AddressOrigin origin,
+                                  IP::Protocol family);
 
     /** @brief write the ARP Control configuration into the conf file.
      */
@@ -615,10 +617,9 @@ class EthernetInterface : public Ifaces
      *  @return A tuple containing whether the IP address exists and the object
      * path
      */
-    std::tuple<bool, ObjectPath> createStaticIP(IP::Protocol protType,
-                                                std::string ipaddress,
-                                                uint8_t prefixLength,
-                                                std::string ipgateway);
+    std::tuple<bool, ObjectPath> createStaticIP(
+        IP::Protocol protType, std::string ipaddress, uint8_t prefixLength,
+        std::string ipgateway);
 
     std::map<std::string, std::unique_ptr<sdbusplus::bus::match_t>> signals;
 

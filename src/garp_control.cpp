@@ -142,10 +142,7 @@ namespace ethernetIP
  */
 IPv4Addrs fromString(const std::string& address)
 {
-    struct sockaddr_in sa
-    {
-        0
-    };
+    struct sockaddr_in sa{0};
     int ret = inet_pton(AF_INET, address.c_str(), &(sa.sin_addr));
     if (ret != 1)
     {
@@ -244,7 +241,8 @@ GARP::GARP(const std::string& interfaceName, const int interval)
 {
     this->interface = interfaceName;
     this->replyInterval = interval;
-    /* Reason for False Positive - It is guaranteed to be assigned a valid value before any usage. */
+    /* Reason for False Positive - It is guaranteed to be assigned a valid value
+     * before any usage. */
     /* coverity[uninit_member : FALSE] */
 }
 

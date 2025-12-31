@@ -21,7 +21,8 @@ namespace ncsi
 {
 
 using CallBack = int (*)(struct nl_msg* msg, void* arg);
-/* Reason for False Positive - Any potential exceptions are handled internally */
+/* Reason for False Positive - Any potential exceptions are handled internally
+ */
 /* coverity[Uncaught exception : FALSE] */
 static stdplus::StrBuf toHexStr(std::span<const uint8_t> c) noexcept
 {
@@ -69,8 +70,7 @@ class Command
     Command(
         int c, int nc = DEFAULT_VALUE,
         std::span<const unsigned char> p = std::span<const unsigned char>()) :
-        cmd(c),
-        ncsi_cmd(nc), payload(p)
+        cmd(c), ncsi_cmd(nc), payload(p)
     {}
 
     int cmd;
@@ -270,8 +270,8 @@ CallBack sendCallBack = [](struct nl_msg* msg, void* arg) {
     }
 
     auto data_len = nla_len(tb[NCSI_ATTR_DATA]) - sizeof(NCSIPacketHeader);
-    unsigned char* data = (unsigned char*)nla_data(tb[NCSI_ATTR_DATA]) +
-                          sizeof(NCSIPacketHeader);
+    unsigned char* data =
+        (unsigned char*)nla_data(tb[NCSI_ATTR_DATA]) + sizeof(NCSIPacketHeader);
 
     // Dump the response to stdout. Enhancement: option to save response data
     auto str = toHexStr(std::span<const unsigned char>(data, data_len));
@@ -359,8 +359,8 @@ int applyCmd(int ifindex, const Command& cmd, int package = DEFAULT_VALUE,
 
     if (cmd.ncsi_cmd != DEFAULT_VALUE)
     {
-        std::vector<unsigned char> pl(sizeof(NCSIPacketHeader) +
-                                      cmd.payload.size());
+        std::vector<unsigned char> pl(
+            sizeof(NCSIPacketHeader) + cmd.payload.size());
         NCSIPacketHeader* hdr = (NCSIPacketHeader*)pl.data();
 
         std::copy(cmd.payload.begin(), cmd.payload.end(),
@@ -529,8 +529,7 @@ bool getLinkStatus(int ifindex)
         return false;
     }
 
-    return (linkStatus & 0x01) == 1 ? true:false ;
-
+    return (linkStatus & 0x01) == 1 ? true : false;
 }
 } // namespace ncsi
 } // namespace network

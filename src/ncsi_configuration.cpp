@@ -129,7 +129,7 @@ NCSIIface::Mode Configuration::mode(Mode value)
             NCSIIface::channel(MAX_CHANNEL_NUM);
             clearInterface(eth.getIfIdx());
             eth.manager.get().writeToConfigurationFile();
-	}
+        }
     }
     return value;
 }
