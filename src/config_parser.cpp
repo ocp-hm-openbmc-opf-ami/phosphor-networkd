@@ -72,9 +72,8 @@ fs::path pathForIntfInfo(const fs::path& dir, std::string_view intf)
     return dir / intf;
 }
 
-const std::string*
-    SectionMap::getLastValueString(std::string_view section,
-                                   std::string_view key) const noexcept
+const std::string* SectionMap::getLastValueString(
+    std::string_view section, std::string_view key) const noexcept
 {
     auto sit = find(section);
     if (sit == end())
@@ -93,8 +92,8 @@ const std::string*
     return nullptr;
 }
 
-std::tuple<ReturnCode, KeyValueMapstr>
-    Parser::getSectionstr(const std::string& section)
+std::tuple<ReturnCode, KeyValueMapstr> Parser::getSectionstr(
+    const std::string& section)
 {
     auto it = sections.find(section);
     if (it == sections.end())
@@ -107,8 +106,8 @@ std::tuple<ReturnCode, KeyValueMapstr>
     return std::make_tuple(ReturnCode::SUCCESS, it->second);
 }
 
-std::tuple<ReturnCode, ValueListstr>
-    Parser::getValues(const std::string& section, const std::string& key)
+std::tuple<ReturnCode, ValueListstr> Parser::getValues(
+    const std::string& section, const std::string& key)
 {
     ValueListstr values;
     KeyValueMapstr keyValues{};
@@ -280,7 +279,8 @@ struct Parse
         auto it = section->find(k);
         if (it == section->end())
         {
-            /* Reason for False Positive - Logic ensures the pointer is not null before dereference */
+            /* Reason for False Positive - Logic ensures the pointer is not null
+             * before dereference */
             /* coverity[var_deref_model : FALSE] */
             std::tie(it, std::ignore) =
                 section->emplace(Key(Key::unchecked(), k), ValueList{});

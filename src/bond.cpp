@@ -3,6 +3,7 @@
 #include "ethernet_interface.hpp"
 #include "network_manager.hpp"
 #include "system_queries.hpp"
+#include "util.hpp"
 
 #include <nlohmann/json.hpp>
 #include <phosphor-logging/elog-errors.hpp>
@@ -16,8 +17,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include "util.hpp"
-
 
 namespace phosphor
 {
@@ -51,8 +50,8 @@ Bond::Bond(sdbusplus::bus_t& bus, std::string_view objRoot,
 Bond::Bond(sdbusplus::bus_t& bus, sdbusplus::message::object_path objPath,
            EthernetInterface& eth, std::string activeSlave, uint8_t miiMonitor,
            Mode mode) :
-    BondObj(bus, objPath.str.c_str(), BondObj::action::defer_emit),
-    eth(eth), objPath(std::move(objPath))
+    BondObj(bus, objPath.str.c_str(), BondObj::action::defer_emit), eth(eth),
+    objPath(std::move(objPath))
 {
     BondIntf::activeSlave(activeSlave, true);
     BondIntf::miiMonitor(miiMonitor, true);
@@ -209,7 +208,8 @@ void Bond::restoreConfiguration(
     }
 
     writeBondConfiguration(false);
-    std::ifstream tmpIfs("/sys/class/net/bond0/bonding/primary", std::ifstream::in);
+    std::ifstream tmpIfs("/sys/class/net/bond0/bonding/primary",
+                         std::ifstream::in);
     if (!tmpIfs.is_open())
     {
         log<level::INFO>(
@@ -238,10 +238,11 @@ void Bond::restoreConfiguration(
     for (auto it = eth.manager.get().interfaces.begin();
          it != eth.manager.get().interfaces.end(); it++)
     {
-        if((it->second->interfaceName() != "hostusb0") && (it->second->interfaceName() != "bond0"))
+        if ((it->second->interfaceName() != "hostusb0") &&
+            (it->second->interfaceName() != "bond0"))
         {
-            config::Parser config(
-                config::pathForIntfConf(eth.manager.get().getConfDir(), it->second->interfaceName()));
+            config::Parser config(config::pathForIntfConf(
+                eth.manager.get().getConfDir(), it->second->interfaceName()));
             std::string mac = getMAC(config);
 
             system::setNICUp(it->second->interfaceName(), false);
@@ -393,26 +394,28 @@ void Bond::updateMACAddress(std::string macStr)
         netdev["MACAddressPolicy"].emplace_back("persistent");
         auto& bond = config.map["Bond"].emplace_back();
         bond["Mode"].emplace_back("active-backup");
-        bond["MIIMonitorSec"].emplace_back(fmt::format("{}ms", BondIntf::miiMonitor()));
-        config.writeFile(
-            config::pathForIntfDev(eth.manager.get().getConfDir(), eth.interfaceName()));
+        bond["MIIMonitorSec"].emplace_back(
+            fmt::format("{}ms", BondIntf::miiMonitor()));
+        config.writeFile(config::pathForIntfDev(eth.manager.get().getConfDir(),
+                                                eth.interfaceName()));
     }
 
     for (auto it = eth.manager.get().interfaces.begin();
          it != eth.manager.get().interfaces.end(); it++)
     {
-	if(it->second->interfaceName() == "bond0")
-	{
-	    it->second->addrs.clear();
-	}
-
-        if((it->second->interfaceName() != "hostusb0") && (it->second->interfaceName() != "bond0"))
+        if (it->second->interfaceName() == "bond0")
         {
-                system::setNICUp(it->second->interfaceName(), false);
+            it->second->addrs.clear();
+        }
+
+        if ((it->second->interfaceName() != "hostusb0") &&
+            (it->second->interfaceName() != "bond0"))
+        {
+            system::setNICUp(it->second->interfaceName(), false);
         }
     }
 
-    system::setNICUp("bond0",false);
+    system::setNICUp("bond0", false);
 
     sleep(2);
 

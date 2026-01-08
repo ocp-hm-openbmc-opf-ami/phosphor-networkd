@@ -1,21 +1,25 @@
 #include "host_interface.hpp"
+
 #include "config_parser.hpp"
-#include <sys/ioctl.h>
-#include <net/if.h>
+#include "util.hpp"
+
 #include <arpa/inet.h>
 #include <linux/rtnetlink.h>
-#include <iostream>
+#include <net/if.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
-#include <cstring>
-#include <cerrno>
-#include <string_view>
-#include <memory>
-#include <stdplus/str/conv.hpp>
+
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/message.hpp>
-#include <format>
+#include <stdplus/str/conv.hpp>
+
+#include <cerrno>
+#include <cstring>
 #include <filesystem>
-#include "util.hpp"
+#include <format>
+#include <iostream>
+#include <memory>
+#include <string_view>
 
 namespace phosphor
 {
@@ -55,15 +59,16 @@ struct Proto<stdplus::In6Addr>
 };
 
 HostIPAddress::HostIPAddress(sdbusplus::bus_t& bus, std::string_view objRoot,
-                     stdplus::PinnedRef<HostInterface> parent,
-                     stdplus::SubnetAny addr, AddressOrigin origin,
-                     uint8_t idx) :
+                             stdplus::PinnedRef<HostInterface> parent,
+                             stdplus::SubnetAny addr, AddressOrigin origin,
+                             uint8_t idx) :
     HostIPAddress(bus, makeObjPath(objRoot, addr), parent, addr, origin, idx)
 {}
 
-HostIPAddress::HostIPAddress(sdbusplus::bus_t& bus, sdbusplus::message::object_path objPath,
-              stdplus::PinnedRef<HostInterface> parent,
-              stdplus::SubnetAny addr, IP::AddressOrigin origin, uint8_t idx) :
+HostIPAddress::HostIPAddress(
+    sdbusplus::bus_t& bus, sdbusplus::message::object_path objPath,
+    stdplus::PinnedRef<HostInterface> parent, stdplus::SubnetAny addr,
+    IP::AddressOrigin origin, uint8_t idx) :
     hostIPIfaces(bus, objPath.str.c_str(), hostIPIfaces::action::defer_emit),
     parent(parent), objPath(std::move(objPath))
 {
@@ -122,22 +127,29 @@ void HostIPAddress::delete_()
     }
 }
 
-int HostInterface::configureHostInterface(const std::string &ipaddress, const uint8_t prefixLength, const uint8_t ifindex)
+int HostInterface::configureHostInterface(const std::string& ipaddress,
+                                          const uint8_t prefixLength,
+                                          const uint8_t ifindex)
 {
     struct ifreq ifr;
 
-    char if_name[IFNAMSIZ]={0};
+    char if_name[IFNAMSIZ] = {0};
 
-    if(if_indextoname(ifindex, if_name) == NULL)
+    if (if_indextoname(ifindex, if_name) == NULL)
     {
-        log<level::ERR>(fmt::format("Failed to get interface name for index : = {}",ifindex).c_str());
+        log<level::ERR>(
+            fmt::format("Failed to get interface name for index : = {}",
+                        ifindex)
+                .c_str());
         return -1;
     }
 
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)
     {
-        log<level::ERR>(fmt::format("Failed to create socket : = {}", strerror(errno)).c_str());
+        log<level::ERR>(
+            fmt::format("Failed to create socket : = {}", strerror(errno))
+                .c_str());
         return -1;
     }
 
@@ -149,7 +161,9 @@ int HostInterface::configureHostInterface(const std::string &ipaddress, const ui
 
     if (inet_pton(AF_INET, ipaddress.c_str(), &addr.sin_addr) <= 0)
     {
-        log<level::ERR>(fmt::format("Invalid IP Address : = {}", ipaddress.c_str()).c_str());
+        log<level::ERR>(
+            fmt::format("Invalid IP Address : = {}", ipaddress.c_str())
+                .c_str());
         close(sockfd);
         return -1;
     }
@@ -157,13 +171,14 @@ int HostInterface::configureHostInterface(const std::string &ipaddress, const ui
     // Copy the entire sockaddr structure, not just the address part
     std::memcpy(&ifr.ifr_addr, &addr, sizeof(struct sockaddr));
 
-    if(ioctl(sockfd, SIOCSIFADDR, &ifr) < 0)
+    if (ioctl(sockfd, SIOCSIFADDR, &ifr) < 0)
     {
-        log<level::ERR>(fmt::format("Failed to set IP Address : = {}", strerror(errno)).c_str());
+        log<level::ERR>(
+            fmt::format("Failed to set IP Address : = {}", strerror(errno))
+                .c_str());
         close(sockfd);
         return -1;
     }
-
 
     std::memset(&ifr, 0, sizeof(ifr));
     std::strncpy(ifr.ifr_name, if_name, IFNAMSIZ - 1);
@@ -176,9 +191,11 @@ int HostInterface::configureHostInterface(const std::string &ipaddress, const ui
     netmask_addr.sin_addr.s_addr = htonl(mask);
     std::memcpy(&ifr.ifr_netmask, &netmask_addr, sizeof(struct sockaddr));
 
-    if(ioctl(sockfd, SIOCSIFNETMASK, &ifr) < 0)
+    if (ioctl(sockfd, SIOCSIFNETMASK, &ifr) < 0)
     {
-        log<level::ERR>(fmt::format("Failed to set netmask : = {}", strerror(errno)).c_str());
+        log<level::ERR>(
+            fmt::format("Failed to set netmask : = {}", strerror(errno))
+                .c_str());
         close(sockfd);
         return -1;
     }
@@ -187,18 +204,22 @@ int HostInterface::configureHostInterface(const std::string &ipaddress, const ui
     std::strncpy(ifr.ifr_name, if_name, IFNAMSIZ - 1);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
-    if(ioctl(sockfd, SIOCGIFFLAGS, &ifr) < 0)
+    if (ioctl(sockfd, SIOCGIFFLAGS, &ifr) < 0)
     {
-        log<level::ERR>(fmt::format("Failed to get interface flags : = {}", strerror(errno)).c_str());
+        log<level::ERR>(
+            fmt::format("Failed to get interface flags : = {}", strerror(errno))
+                .c_str());
         close(sockfd);
         return -1;
     }
 
     ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
 
-    if(ioctl(sockfd, SIOCSIFFLAGS, &ifr) < 0)
+    if (ioctl(sockfd, SIOCSIFFLAGS, &ifr) < 0)
     {
-        log<level::ERR>(fmt::format("Failed to set interface flags : = {}", strerror(errno)).c_str());
+        log<level::ERR>(
+            fmt::format("Failed to set interface flags : = {}", strerror(errno))
+                .c_str());
         close(sockfd);
         return -1;
     }
@@ -208,13 +229,15 @@ int HostInterface::configureHostInterface(const std::string &ipaddress, const ui
 }
 
 HostInterface::HostInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
-              stdplus::zstring_view objPath, const InterfaceInfo& info):
-              hostIfaces(bus, objPath.c_str(), hostIfaces::action::defer_emit),
-              bus(bus), objPath(std::string(objPath))
+                             stdplus::zstring_view objPath,
+                             const InterfaceInfo& info) :
+    hostIfaces(bus, objPath.c_str(), hostIfaces::action::defer_emit), bus(bus),
+    objPath(std::string(objPath))
 {
-    const config::Parser& config(config::pathForIntfConf(HOST_INTERFACE_CONF_DIR, intfName));
+    const config::Parser& config(
+        config::pathForIntfConf(HOST_INTERFACE_CONF_DIR, intfName));
 
-    std::string ipaddress {};
+    std::string ipaddress{};
     auto value = config.map.getLastValueString("Network", "IPAddress");
     if (value == nullptr)
     {
@@ -242,19 +265,22 @@ HostInterface::HostInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>(fmt::format("Failed to configure host interface : e.what() = {}", e.what()).c_str());
+        log<level::ERR>(
+            fmt::format("Failed to configure host interface : e.what() = {}",
+                        e.what())
+                .c_str());
         std::runtime_error("Configure hostusb0 failed");
     }
-    
+
     this->ifindex = info.idx;
-    
+
     createEthernetInterface();
-    
-    if(info.mac)
+
+    if (info.mac)
     {
         MacAddressIntf::macAddress(stdplus::toStr(*info.mac), true);
     }
-    
+
     emit_object_added();
 }
 
@@ -288,7 +314,7 @@ void HostInterface::addAddr(const AddressInfo& info)
         origin = IP::AddressOrigin::LinkLocal;
     }
 
-    int idx=0;
+    int idx = 0;
     auto it = addrs.find(info.ifaddr);
     if (it != addrs.end())
     {
@@ -301,36 +327,40 @@ void HostInterface::addAddr(const AddressInfo& info)
             auto tmpAddr = stdplus::toStr(info.ifaddr.getAddr());
             if (tmpAddr.find(".") != std::string::npos)
             {
-                for(const auto &[_,addr] : addrs)
+                for (const auto& [_, addr] : addrs)
                 {
-                    if(addr->type() == IP::Protocol::IPv4)
+                    if (addr->type() == IP::Protocol::IPv4)
                     {
-                        runSystemCommand("/usr/sbin/ip", fmt::format(" addr del {}/{} dev {}",
-                                        addr->address(),addr->prefixLength(),
-                                        intfName).c_str());
+                        runSystemCommand(
+                            "/usr/sbin/ip",
+                            fmt::format(" addr del {}/{} dev {}",
+                                        addr->address(), addr->prefixLength(),
+                                        intfName)
+                                .c_str());
                     }
                 }
             }
         }
     }
-    
-    auto addr = addrs.emplace(info.ifaddr, std::make_unique<HostIPAddress>(
-                        bus, std::string_view(objPath), *this,
-                        info.ifaddr, origin, idx));
+
+    auto addr = addrs.emplace(
+        info.ifaddr,
+        std::make_unique<HostIPAddress>(bus, std::string_view(objPath), *this,
+                                        info.ifaddr, origin, idx));
     writeConfigurationFile(*addr.first->second);
 }
 
 void HostInterface::removeAddr(const AddressInfo& info)
 {
     auto it = addrs.find(info.ifaddr);
-    if(it != addrs.end())
+    if (it != addrs.end())
     {
         addrs.erase(it);
     }
 
-    for(const auto &[_,addr] : addrs)
+    for (const auto& [_, addr] : addrs)
     {
-        if(addr->type() == IP::Protocol::IPv4)
+        if (addr->type() == IP::Protocol::IPv4)
         {
             writeConfigurationFile(*addr);
             return;
@@ -346,13 +376,15 @@ void HostInterface::createEthernetInterface()
     {
         // Create an interface using sdbusplus and unique_ptr
         ethernetInterface = std::make_unique<sdbusplus::server::interface_t>(
-                bus.get(), objPath.c_str(), ethIntf, vtable, this);
+            bus.get(), objPath.c_str(), ethIntf, vtable, this);
     }
     catch (const std::exception& e)
     {
         // Log error - interface remains nullptr after reset()
-        log<level::ERR>(fmt::format("Failed to create ethernet interface : {}", e.what()).c_str());
-        ethernetInterface = nullptr;  // Explicit but not necessary after reset()
+        log<level::ERR>(
+            fmt::format("Failed to create ethernet interface : {}", e.what())
+                .c_str());
+        ethernetInterface = nullptr; // Explicit but not necessary after reset()
     }
 }
 
@@ -374,23 +406,25 @@ uint64_t HostInterface::gratuitousARPInterval(uint64_t interval)
     elog<NotAllowed>(Reason("Property update is not allowed"));
 }
 
-void HostInterface::writeConfigurationFile(stdplus::PinnedRef<HostIPAddress> addr)
+void HostInterface::writeConfigurationFile(
+    stdplus::PinnedRef<HostIPAddress> addr)
 {
     config::Parser config;
 
-    if(addr.get().type() == IP::Protocol::IPv4)
+    if (addr.get().type() == IP::Protocol::IPv4)
     {
-	    auto& net = config.map["Network"].emplace_back();
-	    net["IPAddress"].emplace_back(addr.get().address().c_str());
-	    net["PrefixLength"].emplace_back(fmt::format("{}", addr.get().prefixLength()));
-	    config.writeFile(config::pathForIntfConf(HOST_INTERFACE_CONF_DIR, intfName));
+        auto& net = config.map["Network"].emplace_back();
+        net["IPAddress"].emplace_back(addr.get().address().c_str());
+        net["PrefixLength"].emplace_back(
+            fmt::format("{}", addr.get().prefixLength()));
+        config.writeFile(
+            config::pathForIntfConf(HOST_INTERFACE_CONF_DIR, intfName));
     }
 }
 
 int HostInterface::_callback_get_interface_name(
-        sd_bus*, const char*, const char*, const char*,
-        sd_bus_message* msg, void* context,
-        sd_bus_error* error [[maybe_unused]])
+    sd_bus*, const char*, const char*, const char*, sd_bus_message* msg,
+    void* context, sd_bus_error* error [[maybe_unused]])
 {
     if (msg != nullptr && context != nullptr)
     {
@@ -408,7 +442,8 @@ int HostInterface::_callback_get_interface_name(
     else
     {
         // The message or context were null
-        log<level::ERR>("Unable to service get interface name property callback");
+        log<level::ERR>(
+            "Unable to service get interface name property callback");
         return -1;
     }
 
@@ -416,9 +451,8 @@ int HostInterface::_callback_get_interface_name(
 }
 
 int HostInterface::_callback_get_dhcp4(
-        sd_bus*, const char*, const char*, const char*,
-        sd_bus_message* msg, void* context,
-        sd_bus_error* error [[maybe_unused]])
+    sd_bus*, const char*, const char*, const char*, sd_bus_message* msg,
+    void* context, sd_bus_error* error [[maybe_unused]])
 {
     if (msg != nullptr && context != nullptr)
     {
@@ -444,9 +478,8 @@ int HostInterface::_callback_get_dhcp4(
 }
 
 int HostInterface::_callback_get_default_gateway(
-        sd_bus*, const char*, const char*, const char*,
-        sd_bus_message* msg, void* context,
-        sd_bus_error* error [[maybe_unused]])
+    sd_bus*, const char*, const char*, const char*, sd_bus_message* msg,
+    void* context, sd_bus_error* error [[maybe_unused]])
 {
     if (msg != nullptr && context != nullptr)
     {
@@ -464,7 +497,8 @@ int HostInterface::_callback_get_default_gateway(
     else
     {
         // The message or context were null
-        log<level::ERR>("Unable to service get default gateway property callback");
+        log<level::ERR>(
+            "Unable to service get default gateway property callback");
         return -1;
     }
 
@@ -472,9 +506,8 @@ int HostInterface::_callback_get_default_gateway(
 }
 
 int HostInterface::_callback_get_backup_gateway(
-        sd_bus*, const char*, const char*, const char*,
-        sd_bus_message* msg, void* context,
-        sd_bus_error* error [[maybe_unused]])
+    sd_bus*, const char*, const char*, const char*, sd_bus_message* msg,
+    void* context, sd_bus_error* error [[maybe_unused]])
 {
     if (msg != nullptr && context != nullptr)
     {
@@ -492,7 +525,8 @@ int HostInterface::_callback_get_backup_gateway(
     else
     {
         // The message or context were null
-        log<level::ERR>("Unable to service get backup gateway property callback");
+        log<level::ERR>(
+            "Unable to service get backup gateway property callback");
         return -1;
     }
 
@@ -500,9 +534,8 @@ int HostInterface::_callback_get_backup_gateway(
 }
 
 int HostInterface::_callback_get_backup_gateway_mac_address(
-        sd_bus*, const char*, const char*, const char*,
-        sd_bus_message* msg, void* context,
-        sd_bus_error* error [[maybe_unused]])
+    sd_bus*, const char*, const char*, const char*, sd_bus_message* msg,
+    void* context, sd_bus_error* error [[maybe_unused]])
 {
     if (msg != nullptr && context != nullptr)
     {
@@ -520,7 +553,8 @@ int HostInterface::_callback_get_backup_gateway_mac_address(
     else
     {
         // The message or context were null
-        log<level::ERR>("Unable to service get backup gateway mac address property callback");
+        log<level::ERR>(
+            "Unable to service get backup gateway mac address property callback");
         return -1;
     }
 
@@ -528,9 +562,8 @@ int HostInterface::_callback_get_backup_gateway_mac_address(
 }
 
 int HostInterface::_callback_get_nic_enabled(
-        sd_bus*, const char*, const char*, const char*,
-        sd_bus_message* msg, void* context,
-        sd_bus_error* error [[maybe_unused]])
+    sd_bus*, const char*, const char*, const char*, sd_bus_message* msg,
+    void* context, sd_bus_error* error [[maybe_unused]])
 {
     if (msg != nullptr && context != nullptr)
     {
@@ -558,34 +591,30 @@ int HostInterface::_callback_get_nic_enabled(
 const sdbusplus::vtable::vtable_t HostInterface::vtable[] = {
     sdbusplus::vtable::start(),
 
-    sdbusplus::vtable::property("InterfaceName",
-                         "s", _callback_get_interface_name,
-                        sdbusplus::vtable::property_::emits_change),
+    sdbusplus::vtable::property("InterfaceName", "s",
+                                _callback_get_interface_name,
+                                sdbusplus::vtable::property_::emits_change),
 
-    sdbusplus::vtable::property("DHCP4",
-                         "b", _callback_get_dhcp4,
-                        sdbusplus::vtable::property_::emits_change),
+    sdbusplus::vtable::property("DHCP4", "b", _callback_get_dhcp4,
+                                sdbusplus::vtable::property_::emits_change),
 
-    sdbusplus::vtable::property("DefaultGateway",
-                         "s", _callback_get_default_gateway,
-                        sdbusplus::vtable::property_::emits_change),
+    sdbusplus::vtable::property("DefaultGateway", "s",
+                                _callback_get_default_gateway,
+                                sdbusplus::vtable::property_::emits_change),
 
-    sdbusplus::vtable::property("BackupGateway",
-                         "s", _callback_get_backup_gateway,
-                        sdbusplus::vtable::property_::emits_change),
+    sdbusplus::vtable::property("BackupGateway", "s",
+                                _callback_get_backup_gateway,
+                                sdbusplus::vtable::property_::emits_change),
 
-    sdbusplus::vtable::property("BackupGatewayMACAddress",
-                         "s", _callback_get_backup_gateway_mac_address,
-                        sdbusplus::vtable::property_::emits_change),
+    sdbusplus::vtable::property("BackupGatewayMACAddress", "s",
+                                _callback_get_backup_gateway_mac_address,
+                                sdbusplus::vtable::property_::emits_change),
 
-    sdbusplus::vtable::property("NICEnabled",
-                         "b", _callback_get_nic_enabled,
-                        sdbusplus::vtable::property_::emits_change),
+    sdbusplus::vtable::property("NICEnabled", "b", _callback_get_nic_enabled,
+                                sdbusplus::vtable::property_::emits_change),
 
-    sdbusplus::vtable::end()
-};
+    sdbusplus::vtable::end()};
 
 } // namespace hostintf
-} // namespace network  
+} // namespace network
 } // namespace phosphor
-

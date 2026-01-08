@@ -71,8 +71,8 @@ class Configuration : NCSIObj
     void manualDetection() override;
 
     /** Get value of ChannelList */
-    std::vector<std::tuple<uint16_t, std::vector<uint16_t>>>
-        channelList() const override;
+    std::vector<std::tuple<uint16_t, std::vector<uint16_t>>> channelList()
+        const override;
 
     using NCSIIface::channel;
     using NCSIIface::mode;

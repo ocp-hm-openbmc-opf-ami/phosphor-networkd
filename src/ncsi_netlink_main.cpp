@@ -27,7 +27,8 @@ static void exitWithError(const char* err, char** argv)
     lg2::error("ERROR: {ERROR}", "ERROR", err);
     exit(EXIT_FAILURE);
 }
-/* Reason for False Positive - Any potential exceptions are handled internally */
+/* Reason for False Positive - Any potential exceptions are handled internally
+ */
 /* coverity[Uncaught exception : FALSE] */
 int main(int argc, char** argv)
 {

@@ -81,28 +81,28 @@ class Configuration : public Iface
     /** @brief Implementation for SetVendorOption
      *  Set vendor DHCP vendor option and value
      *
-     *  @param[in] option - 
-     *  @param[in] value - 
+     *  @param[in] option -
+     *  @param[in] value -
      *
-     *  @return result[int16_t] - 
+     *  @return result[int16_t] -
      */
     int16_t setVendorOption(uint32_t option, std::string value) override;
 
     /** @brief Implementation for GetVendorOption
      *  Get vendor DHCP vendor value by option
      *
-     *  @param[in] option - 
+     *  @param[in] option -
      *
-     *  @return result[std::string] - 
+     *  @return result[std::string] -
      */
     std::string getVendorOption(uint32_t option) override;
 
     /** @brief Implementation for DelVendorOption
      *  Delete vendor DHCP vendor value by option
      *
-     *  @param[in] option - 
+     *  @param[in] option -
      *
-     *  @return result[int16_t] - 
+     *  @return result[int16_t] -
      */
     int16_t delVendorOption(uint32_t option) override;
 
@@ -126,6 +126,7 @@ class Configuration : public Iface
     using ConfigIntf::ntpEnabled;
     using ConfigIntf::sendHostNameEnabled;
     using ConfigIntf::vendorClassIdentifier;
+
   protected:
     /** Signals to notify other service via dbus*/
     std::map<std::string, std::unique_ptr<sdbusplus::bus::match_t>> signals;

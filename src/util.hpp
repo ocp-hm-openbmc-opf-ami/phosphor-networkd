@@ -4,11 +4,11 @@
 #include <stdplus/raw.hpp>
 #include <stdplus/zstring_view.hpp>
 
-#include <unordered_map>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -114,8 +114,8 @@ std::string getIP6StaticRtrAddr(const config::Parser& config,
 int getIP6StaticRtrPrefix(const config::Parser& config,
                           const std::string& Router);
 
-std::tuple<std::string, uint8_t, uint8_t>
-    getNCSIValue(const config::Parser& config);
+std::tuple<std::string, uint8_t, uint8_t> getNCSIValue(
+    const config::Parser& config);
 
 /** @brief read the IPv4Enable value from the configuration file
  *  @param[in] config - The parsed configuration.
@@ -158,8 +158,8 @@ DHCPVal getDHCPValue(const config::Parser& config);
 bool getDHCPProp(const config::Parser& config, DHCPType dhcpType,
                  std::string_view key);
 
-std::optional<std::tuple<bool, std::string, int>>
-    getPHYInfo(const config::Parser& config);
+std::optional<std::tuple<bool, std::string, int>> getPHYInfo(
+    const config::Parser& config);
 
 bool getArpGarpEnabled(const config::Parser& config, std::string_view section);
 std::string getGarpInterval(const config::Parser& config);
@@ -172,7 +172,8 @@ std::string getIPv4DefaultGateway(const config::Parser& config);
 
 std::string getMAC(const config::Parser& config);
 
-std::unordered_map<uint32_t, std::string> getDHCPVendorOption(const config::Parser& config, DHCPType dhcpType);
+std::unordered_map<uint32_t, std::string> getDHCPVendorOption(
+    const config::Parser& config, DHCPType dhcpType);
 
 std::string getDHCPVendorClassIdentifier(const config::Parser& config);
 /** @brief Get all the interfaces from the system.
@@ -193,8 +194,8 @@ void executeCommandinChildProcess(stdplus::zstring_view path, char** args);
 std::string_view getIgnoredInterfacesEnv();
 
 /** @brief Parse the comma separated interface names */
-std::unordered_set<std::string_view>
-    parseInterfaces(std::string_view interfaces);
+std::unordered_set<std::string_view> parseInterfaces(
+    std::string_view interfaces);
 
 /** @brief Get the ignored interfaces */
 const std::unordered_set<std::string_view>& getIgnoredInterfaces();

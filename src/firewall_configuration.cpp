@@ -33,8 +33,8 @@ namespace firewall
 
 Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
                              Manager& parent) :
-    Iface(bus, path.c_str(), Iface::action::defer_emit),
-    bus(bus), manager(parent)
+    Iface(bus, path.c_str(), Iface::action::defer_emit), bus(bus),
+    manager(parent)
 {
     // Initial Rules File Path
     execute("/usr/sbin/iptables", "iptables", "-F");
@@ -70,9 +70,9 @@ int16_t Configuration::addRule(
     std::string macAddress, std::string startTime, std::string stopTime,
     FirewallIface::IP IPver)
 {
-    int16_t ret = addRuleDetailSteps(
-        target, control, protocol, startIPAddress, endIPAddress, startPort,
-        endPort, macAddress, startTime, stopTime, IPver);
+    int16_t ret = addRuleDetailSteps(target, control, protocol, startIPAddress,
+                                     endIPAddress, startPort, endPort,
+                                     macAddress, startTime, stopTime, IPver);
 
     if (ret < 0)
     {
@@ -98,10 +98,10 @@ int16_t Configuration::delRule(
 {
     int16_t ret;
     if (control > (uint8_t)ControlBit::TIMEOUT &&
-         (control & (uint8_t)ControlBit::IP) == 0 &&
-         (control & (uint8_t)ControlBit::MAC) == 0 &&
-         (control & (uint8_t)ControlBit::PORT) == 0 &&
-         (control & (uint8_t)ControlBit::PROTOCOL) == 0)
+        (control & (uint8_t)ControlBit::IP) == 0 &&
+        (control & (uint8_t)ControlBit::MAC) == 0 &&
+        (control & (uint8_t)ControlBit::PORT) == 0 &&
+        (control & (uint8_t)ControlBit::PROTOCOL) == 0)
     {
         return -1;
     } // if
@@ -365,7 +365,7 @@ std::vector<IPTableElementTuple> Configuration::getRules(FirewallIface::IP ip)
                         {
                             std::get<0>(element) = true;
                         } // if
-                    }     // if
+                    } // if
                     else if (vec.at(i) == "-j")
                     {
                         i++;
@@ -433,7 +433,7 @@ std::vector<IPTableElementTuple> Configuration::getRules(FirewallIface::IP ip)
                         std::get<10>(element) = vec.at(i);
                         std::get<2>(element) |= (uint8_t)ControlBit::TIMEOUT;
                     } // else if
-                }     // for
+                } // for
                 returnVec.push_back(element);
             }
             ruleFile.close();
@@ -447,64 +447,66 @@ std::vector<IPTableElementTuple> Configuration::getRules(FirewallIface::IP ip)
 /** @brief Implementation for ReorderRules
  *  Reorder the rules
  */
-int16_t Configuration::reorderRules(FirewallIface::IP ip, std::vector<IPTableElementTuple> rules)
+int16_t Configuration::reorderRules(FirewallIface::IP ip,
+                                    std::vector<IPTableElementTuple> rules)
 {
     const char* command;
     const char* logFilePath;
     std::string logFilePathStr;
 
-    //BackUp iptables/ip6tables
+    // BackUp iptables/ip6tables
     if (ip == FirewallIface::IP::IPV4)
     {
         command = "iptables-save | grep -v Preload";
-        logFilePathStr = std::string(TEMP_DIR) + "/" +
-                         std::string(IPTABLES_RULES);
+        logFilePathStr =
+            std::string(TEMP_DIR) + "/" + std::string(IPTABLES_RULES);
         logFilePath = logFilePathStr.c_str();
         executeCommandAndLog(command, logFilePath);
     }
     else
     {
         command = "ip6tables-save | grep -v Preload";
-        logFilePathStr = std::string(TEMP_DIR) + "/" +
-                         std::string(IP6TABLES_RULES);
+        logFilePathStr =
+            std::string(TEMP_DIR) + "/" + std::string(IP6TABLES_RULES);
         logFilePath = logFilePathStr.c_str();
         executeCommandAndLog(command, logFilePath);
     }
 
     // Flush all the rules and preload the rules
     int16_t result = flushAll(ip);
-    if(result < 0)
+    if (result < 0)
     {
         log<level::ERR>("Failed to flush rules\n");
         return result;
     }
 
     // Add new order rules
-    for(const auto& rule : rules)
+    for (const auto& rule : rules)
     {
-        if(std::get<0>(rule)) // Skip preload rules
+        if (std::get<0>(rule)) // Skip preload rules
         {
             continue;
         }
-        
-        result = addRuleDetailSteps(std::get<1>(rule), //FirewallIface::Target target
-                                    std::get<2>(rule), //uint8_t control
-                                    std::get<3>(rule), //FirewallIface::Protocol protocol
-                                    std::get<4>(rule), //std::string startIPAddress
-                                    std::get<5>(rule), //std::string endIPAddress
-                                    std::get<6>(rule), //uint16_t startPort
-                                    std::get<7>(rule), //uint16_t endPort
-                                    std::get<8>(rule), //std::string macAddress
-                                    std::get<9>(rule), //std::string startTime
-                                    std::get<10>(rule), //std::string stopTime
-                                    ip);               //FirewallIface::IP IPver
 
-        if(result != 0)
+        result = addRuleDetailSteps(
+            std::get<1>(rule),  // FirewallIface::Target target
+            std::get<2>(rule),  // uint8_t control
+            std::get<3>(rule),  // FirewallIface::Protocol protocol
+            std::get<4>(rule),  // std::string startIPAddress
+            std::get<5>(rule),  // std::string endIPAddress
+            std::get<6>(rule),  // uint16_t startPort
+            std::get<7>(rule),  // uint16_t endPort
+            std::get<8>(rule),  // std::string macAddress
+            std::get<9>(rule),  // std::string startTime
+            std::get<10>(rule), // std::string stopTime
+            ip);                // FirewallIface::IP IPver
+
+        if (result != 0)
         {
             log<level::ERR>("Failed to add rule\n");
-            
+
             int16_t result_ = flushAll(ip);
-            if(result_ < 0)
+            if (result_ < 0)
             {
                 log<level::ERR>("Failed to flush rules\n");
                 return result_;
@@ -512,21 +514,22 @@ int16_t Configuration::reorderRules(FirewallIface::IP ip, std::vector<IPTableEle
 
             if (ip == FirewallIface::IP::IPV4)
             {
-                if (fs::exists(fmt::format("{}/{}", TEMP_DIR, IPTABLES_RULES).c_str()))
+                if (fs::exists(
+                        fmt::format("{}/{}", TEMP_DIR, IPTABLES_RULES).c_str()))
                     (void)runSystemCommand(
-                    "iptables-restore",
-                    fmt::format("--noflush {}/{}", TEMP_DIR,
-                            IPTABLES_RULES)
-                    .c_str());
+                        "iptables-restore",
+                        fmt::format("--noflush {}/{}", TEMP_DIR, IPTABLES_RULES)
+                            .c_str());
             }
             else
             {
-                if (fs::exists(fmt::format("{}/{}", TEMP_DIR, IP6TABLES_RULES).c_str()))
+                if (fs::exists(fmt::format("{}/{}", TEMP_DIR, IP6TABLES_RULES)
+                                   .c_str()))
                     (void)runSystemCommand(
-                    "ip6tables-restore",
-                    fmt::format("--noflush {}/{}", TEMP_DIR,
-                            IP6TABLES_RULES)
-                    .c_str());
+                        "ip6tables-restore",
+                        fmt::format("--noflush {}/{}", TEMP_DIR,
+                                    IP6TABLES_RULES)
+                            .c_str());
             }
 
             return result;
@@ -549,10 +552,10 @@ int16_t Configuration::addRuleDetailSteps(
     int16_t ret = 0;
     auto customIPv4rules = 0, customIPv6rules = 0;
     if (control > (uint8_t)ControlBit::TIMEOUT &&
-         (control & (uint8_t)ControlBit::IP) == 0 &&
-         (control & (uint8_t)ControlBit::MAC) == 0 &&
-         (control & (uint8_t)ControlBit::PORT) == 0 &&
-         (control & (uint8_t)ControlBit::PROTOCOL) == 0)
+        (control & (uint8_t)ControlBit::IP) == 0 &&
+        (control & (uint8_t)ControlBit::MAC) == 0 &&
+        (control & (uint8_t)ControlBit::PORT) == 0 &&
+        (control & (uint8_t)ControlBit::PROTOCOL) == 0)
     {
         return -1;
     } // if
@@ -621,7 +624,7 @@ int16_t Configuration::addRuleDetailSteps(
                       : protocol == FirewallIface::Protocol::ICMP ? "icmp"
                                                                   : "all");
         } // if
-    }     // if
+    } // if
     else if (startIPAddress.find(":") != std::string::npos)
     {
         if ((control & (uint8_t)ControlBit::PROTOCOL) ==

@@ -189,8 +189,8 @@ class Configuration : Iface
     /** Set value of useMDNS */
     bool useMDNS(bool value) override;
 
-    std::tuple<bool, std::string>
-        hostConf(std::tuple<bool, std::string> value) override;
+    std::tuple<bool, std::string> hostConf(
+        std::tuple<bool, std::string> value) override;
 
     std::vector<std::tuple<std::string, bool, bool, ddnsIface::Method>>
         interfacesConf(std::vector<std::tuple<std::string, bool, bool, Method>>

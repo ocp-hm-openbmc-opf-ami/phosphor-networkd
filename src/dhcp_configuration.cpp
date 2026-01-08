@@ -27,12 +27,10 @@ constexpr auto DNS_OBJ_PATH = "/xyz/openbmc_project/network/dns";
 constexpr auto DNS_INTERFACE = "xyz.openbmc_project.Network.DDNS";
 #endif
 
-Configuration::Configuration(sdbusplus::bus_t& bus,
-                             stdplus::const_zstring objPath,
-                             stdplus::PinnedRef<EthernetInterface> parent,
-                             DHCPType type) :
-    Iface(bus, objPath.c_str(), Iface::action::defer_emit),
-    parent(parent)
+Configuration::Configuration(
+    sdbusplus::bus_t& bus, stdplus::const_zstring objPath,
+    stdplus::PinnedRef<EthernetInterface> parent, DHCPType type) :
+    Iface(bus, objPath.c_str(), Iface::action::defer_emit), parent(parent)
 {
     config::Parser conf(config::pathForIntfConf(
         parent.get().manager.get().getConfDir(), parent.get().interfaceName()));
@@ -174,10 +172,11 @@ bool Configuration::domainEnabled(bool value)
 
 std::string Configuration::vendorClassIdentifier(std::string value)
 {
-   if (this->type != DHCPType::v4)
+    if (this->type != DHCPType::v4)
     {
         log<level::ERR>("Vendor Class Identifier only supports in DHCPv4.\n");
-        elog<NotAllowed>(NotAllowedArgument::REASON("Vendor Class Identifier only supports in DHCPv4.\n"));
+        elog<NotAllowed>(NotAllowedArgument::REASON(
+            "Vendor Class Identifier only supports in DHCPv4.\n"));
     }
     if (value == Configuration::vendorClassIdentifier())
     {
@@ -192,7 +191,8 @@ std::string Configuration::vendorClassIdentifier(std::string value)
 
 int16_t Configuration::setVendorOption(uint32_t option, std::string value)
 {
-    if (auto it = vendorOptionList.find(option); it != vendorOptionList.end() && it->second == value)
+    if (auto it = vendorOptionList.find(option);
+        it != vendorOptionList.end() && it->second == value)
     {
         return 0;
     }
@@ -202,7 +202,6 @@ int16_t Configuration::setVendorOption(uint32_t option, std::string value)
     parent.get().reloadConfigs();
     return 0;
 }
-
 
 std::string Configuration::getVendorOption(uint32_t option)
 {
