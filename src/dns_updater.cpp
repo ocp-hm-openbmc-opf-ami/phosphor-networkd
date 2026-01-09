@@ -8,6 +8,7 @@
 #include "types.hpp"
 #include "util.hpp"
 
+#include <arpa/inet.h>
 #include <fmt/compile.h>
 #include <fmt/format.h>
 #include <sys/stat.h>
@@ -97,7 +98,7 @@ constexpr auto DNS_CONF = "/etc/dns.d/dns.conf";
 constexpr auto DNS_CONF_BAK = "/etc/dns.d/dns.conf.bak";
 constexpr auto TTL = "86400";
 constexpr auto DELAYED_SEC = 3;
-
+constexpr size_t serverMaxNum = 3;
 std::mutex g_mutex;
 
 std::map<std::string, std::unique_ptr<sdbusplus::bus::match_t>> signals;
@@ -144,6 +145,12 @@ Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
         // }
         {
             ddnsIface::useMDNS(true, true);
+        }
+        {
+            dohIface::serverMode(dohIface::Mode::Disable);
+            dohIface::autoServerConf(dohIface::AutoServerName::None);
+            dohIface::serverTraffic(0);
+            dohIface::manualServerConf(std::make_tuple("", "", "", ""));
         }
     }
 
@@ -1230,7 +1237,36 @@ void Configuration::writeConfigurationFile()
         config.map["DDNS"].emplace_back()["SendNsupdate"].emplace_back(
             ddnsIface::sendNsupdateEnabled() ? "true" : "false");
     }
+#if DOH_SUPPORT
+    {
+        auto [server1IP, server2IP, server3IP,
+              serverURL] = dohIface::manualServerConf();
+        auto& doh = config.map["Doh"].emplace_back();
+        auto mode = dohIface::serverMode();
+        auto autoServer = dohIface::autoServerConf();
 
+        doh["Mode"].emplace_back(
+            mode == dohIface::Mode::Disable
+                ? "Disable"
+                : (mode == dohIface::Mode::Auto ? "Auto" : "Manual"));
+        doh["ServerName"].emplace_back(
+            autoServer == dohIface::AutoServerName::Google
+                ? "Google"
+                : (autoServer == dohIface::AutoServerName::Cloudflare
+                       ? "Cloudflare"
+                       : (autoServer == dohIface::AutoServerName::OpenDNS
+                              ? "OpenDNS"
+                              : "None")));
+        doh["IpTraffic"].emplace_back(
+            dohIface::serverTraffic() == 0
+                ? "IPv4"
+                : (dohIface::serverTraffic() == 1 ? "IPv6" : "Both"));
+        doh["Server1IP"].emplace_back(server1IP);
+        doh["Server2IP"].emplace_back(server2IP);
+        doh["Server3IP"].emplace_back(server3IP);
+        doh["ServerURL"].emplace_back(serverURL);
+    }
+#endif
     config.writeFile(DNS_CONF);
     // g_mutex.unlock();
     lg2::info("Wrote dns file: {DNS_CONF}", "DNS_CONF", DNS_CONF);
@@ -1256,7 +1292,13 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
     std::tuple<bool, uint8_t, std::string> tmpDomain;
 #endif
     bool mDNS = false;
-
+#if DOH_SUPPORT
+    dohIface::Mode tmpMode;
+    dohIface::AutoServerName tmpAutoServerName;
+    int16_t tmpTraffic;
+    std::tuple<std::string, std::string, std::string, std::string>
+        tmpManualServer;
+#endif
     if (fs::exists(filePath))
     {
         if (!conf.map.getLastValueString("HostConf", "Automatic") ||
@@ -1330,6 +1372,46 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
                        ? true
                        : false;
         }
+#if DOH_SUPPORT
+        {
+            if (!conf.map.getLastValueString("Doh", "Mode") ||
+                !conf.map.getLastValueString("Doh", "ServerName") ||
+                !conf.map.getLastValueString("Doh", "IpTraffic"))
+            {
+                log<level::ERR>("Skipping host update due to missing values");
+                return -1;
+            }
+
+            tmpMode =
+                *conf.map.getLastValueString("Doh", "Mode") == "Disable"
+                    ? dohIface::Mode::Disable
+                    : (*conf.map.getLastValueString("Doh", "Mode") == "Auto"
+                           ? dohIface::Mode::Auto
+                           : dohIface::Mode::Manual);
+            tmpAutoServerName =
+                *conf.map.getLastValueString("Doh", "ServerName") == "Google"
+                    ? dohIface::AutoServerName::Google
+                    : (*conf.map.getLastValueString("Doh", "ServerName") ==
+                               "Cloudflare"
+                           ? dohIface::AutoServerName::Cloudflare
+                           : (*conf.map.getLastValueString(
+                                  "Doh", "ServerName") == "OpenDNS"
+                                  ? dohIface::AutoServerName::OpenDNS
+                                  : dohIface::AutoServerName::None));
+            tmpTraffic =
+                *conf.map.getLastValueString("Doh", "IpTraffic") == "IPv4"
+                    ? 0
+                    : (*conf.map.getLastValueString("Doh", "IpTraffic") ==
+                               "IPv6"
+                           ? 1
+                           : 2);
+            tmpManualServer = std::make_tuple(
+                *conf.map.getLastValueString("Doh", "Server1IP"),
+                *conf.map.getLastValueString("Doh", "Server2IP"),
+                *conf.map.getLastValueString("Doh", "Server3IP"),
+                *conf.map.getLastValueString("Doh", "ServerURL"));
+        }
+#endif	
         if (bakupInfo)
         {
             preUseMDNS = mDNS;
@@ -1370,6 +1452,12 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
 #endif
             ddnsIface::interfacesConf(tmpInterface);
             ddnsIface::useMDNS(mDNS);
+#if DOH_SUPPORT
+            dohIface::serverMode(tmpMode);
+            dohIface::autoServerConf(tmpAutoServerName);
+            dohIface::serverTraffic(tmpTraffic);
+            dohIface::manualServerConf(tmpManualServer);
+#endif	    
         }
     }
     return 0;
@@ -1392,7 +1480,92 @@ bool Configuration::sendNsupdateEnabled(bool value)
     writeConfigurationFile();
     return value;
 }
+int16_t Configuration::setServer(
+    std::tuple<Mode, AutoServerName, int16_t,
+               std::tuple<std::string, std::string, std::string, std::string>>
+        serverConfig)
+{
+    auto [mode, serverName, ipTraffic, manualServer] = serverConfig;
+    auto [server1IP, server2IP, server3IP, serverURL] = manualServer;
+    std::array<std::string, serverMaxNum> ipGroup = {server1IP, server2IP,
+                                                     server3IP};
 
+#if !DOH_SUPPORT
+    log<level::ERR>("Doh support is not enabled..\n");
+    elog<UnsupportedRequest>(
+        Unsupported::REASON("Doh support is not enabled..\n"));
+#endif
+    switch (mode)
+    {
+        case Mode::Auto:
+            if (ipTraffic > 2 || ipTraffic < 0)
+            {
+                lg2::info("Invalid traffic configuration.\n");
+                return -1;
+            }
+            else if (ipTraffic != dohIface::serverTraffic())
+            {
+                dohIface::serverTraffic(ipTraffic);
+            }
+            if (serverName != dohIface::autoServerConf())
+            {
+                if (serverName == AutoServerName::None)
+                {
+                    lg2::info("Invalid server option.\n");
+                    return -1;
+                }
+                dohIface::autoServerConf(serverName);
+            }
+            break;
+        case Mode::Manual:
+            struct in_addr ipv4{};
+            struct in6_addr ipv6{};
+            auto validateIP = [&](const std::string& ip) -> bool {
+                try
+                {
+                    if (inet_pton(AF_INET, ip.c_str(), &ipv4) == 1)
+                    {
+                        ip_address::isValidIPv4Addr(
+                            ip, ip_address::Type::IP4_ADDRESS);
+                    }
+                    else if (inet_pton(AF_INET6, ip.c_str(), &ipv6) == 1)
+                    {
+                        ip_address::isValidIPv6Addr(
+                            ip, ip_address::Type::IP6_ADDRESS);
+                    }
+                    return true;
+                }
+                catch (const std::exception& e)
+                {
+                    lg2::info("Invalid IP address format\n");
+                    return false;
+                }
+            };
+            for (const auto& ip : ipGroup)
+            {
+                if (ip.empty())
+                    continue;
+                if (!validateIP(ip))
+                {
+                    lg2::info("Invalid IP address.\n");
+                    return -1;
+                }
+            }
+            if (serverURL.empty())
+            {
+                lg2::info("Manual mode needs a valid server URL.\n");
+                return -1;
+            }
+            dohIface::autoServerConf(AutoServerName::None);
+            dohIface::manualServerConf(
+                std::make_tuple(server1IP, server2IP, server3IP, serverURL));
+            break;
+    }
+    dohIface::serverMode(mode);
+    writeConfigurationFile();
+    execute("/usr/bin/https-dns-proxy.sh", "https-dns-proxy.sh", "restart");
+    return 0;
+}
 } // namespace dns
 } // namespace network
 } // namespace phosphor

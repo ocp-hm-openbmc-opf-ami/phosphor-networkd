@@ -6,6 +6,7 @@
 #include <sdbusplus/server/object.hpp>
 #include <stdplus/zstring.hpp>
 #include <xyz/openbmc_project/Network/DDNS/server.hpp>
+#include <xyz/openbmc_project/Network/Doh/server.hpp>
 #include <xyz/openbmc_project/State/BMC/server.hpp>
 
 #include <condition_variable>
@@ -52,8 +53,9 @@ inline void processDNSEntries(const fs::path& inFile)
 } // namespace updater
 
 using ddnsIface = sdbusplus::xyz::openbmc_project::Network::server::DDNS;
+using dohIface = sdbusplus::xyz::openbmc_project::Network::server::Doh;
 
-using Iface = sdbusplus::server::object_t<ddnsIface>;
+using Iface = sdbusplus::server::object_t<ddnsIface, dohIface>;
 using IfacesRegisterStatus =
     std::vector<std::tuple<std::string, bool, bool, bool, ddnsIface::Method>>;
 
@@ -195,6 +197,11 @@ class Configuration : Iface
     std::vector<std::tuple<std::string, bool, bool, ddnsIface::Method>>
         interfacesConf(std::vector<std::tuple<std::string, bool, bool, Method>>
                            value) override;
+    int16_t setServer(
+        std::tuple<
+            Mode, AutoServerName, int16_t,
+            std::tuple<std::string, std::string, std::string, std::string>>
+            serverConfig) override;
 #if 0
         std::tuple<bool, uint8_t, std::string> domainConf(std::tuple<bool, uint8_t, std::string> value) override;
 #endif
@@ -216,6 +223,11 @@ class Configuration : Iface
     using ddnsIface::sendNsupdateEnabled;
     using ddnsIface::setInProgress;
 
+    using dohIface::autoServerConf;
+    using dohIface::manualServerConf;
+    using dohIface::serverMode;
+    using dohIface::serverTraffic;
+    
   protected:
     void writeConfigurationFile();
     int16_t updateDNSInfo(bool bakupInfo);

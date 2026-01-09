@@ -26,3 +26,4 @@ option('enable-nsupdate-feature', type: 'boolean', description: 'Enable nsupdate
 option('enable-tsig-feature', type: 'boolean', description: 'Enable TSIG feature or not')
 option('enable-avahi-support', type: 'boolean', description: 'Enable avahi support or not')
 option('ncsi-manual-detect', type: 'boolean', description: 'Enable NCSI Manual Detection Feature or not')
+option('enable-doh-support', type: 'boolean', description: 'Enable doh support or not')
