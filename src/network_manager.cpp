@@ -509,6 +509,8 @@ void Manager::removeAddress(const AddressInfo& info)
         {
             it->second->addrs.erase(info.ifaddr);
         }
+
+        it->second->addrs.erase(info.ifaddr);
     }
 }
 

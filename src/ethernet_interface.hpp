@@ -548,6 +548,13 @@ class EthernetInterface : public Ifaces
     friend class TestNetworkManager;
 
   private:
+    struct SavedIPAddr
+    {
+        std::string address;
+        uint8_t prefixLength;
+        std::string gateway;
+    };
+    std::vector<SavedIPAddr> savedStaticIPv6Addrs;
     std::unique_ptr<std::thread> vlanMonitorThread;
 
     std::mutex vlanMutex;
