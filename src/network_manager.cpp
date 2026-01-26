@@ -361,15 +361,13 @@ void Manager::addInterface(const InterfaceInfo& info)
         return;
     }
 
-    if (hostIntf == nullptr)
+    if (info.name.value().find("hostusb") != std::string::npos)
     {
-        if (info.name.value() == "hostusb0")
-        {
-            hostIntf =
-                std::make_unique<phosphor::network::hostintf::HostInterface>(
-                    bus, (this->objPath / "hostusb0").str, info);
-            return;
-        }
+        auto intf =
+            std::make_unique<phosphor::network::hostintf::HostInterface>(
+                bus, (this->objPath / info.name.value()).str, info);
+        hostIntfs.insert_or_assign(info.name.value(), std::move(intf));
+        return;
     }
 
     if (info.name)
@@ -408,13 +406,12 @@ void Manager::addInterface(const InterfaceInfo& info)
 
 void Manager::removeInterface(const InterfaceInfo& info)
 {
-    if (hostIntf != nullptr)
+    if (auto it = hostIntfs.find(info.name.value()); it != hostIntfs.end())
     {
-        if (hostIntf->getifindex() == info.idx)
+        if (it->second->getifindex() == info.idx)
         {
-            hostIntf->delete_();
-            hostIntf.reset();
-            hostIntf = nullptr;
+            it->second->delete_();
+            it->second.reset();
             return;
         }
     }
@@ -465,11 +462,11 @@ void Manager::addAddress(const AddressInfo& info)
         return;
     }
 
-    if (hostIntf != nullptr)
+    for (auto& hostIntf : hostIntfs)
     {
-        if (hostIntf->getifindex() == info.ifidx)
+        if (hostIntf.second->getifindex() == info.ifidx)
         {
-            hostIntf->addAddr(info);
+            hostIntf.second->addAddr(info);
             return;
         }
     }
@@ -492,11 +489,11 @@ void Manager::addAddress(const AddressInfo& info)
 
 void Manager::removeAddress(const AddressInfo& info)
 {
-    if (hostIntf != nullptr)
+    for (auto& hostIntf : hostIntfs)
     {
-        if (hostIntf->getifindex() == info.ifidx)
+        if (hostIntf.second->getifindex() == info.ifidx)
         {
-            hostIntf->removeAddr(info);
+            hostIntf.second->removeAddr(info);
             return;
         }
     }
@@ -521,9 +518,9 @@ void Manager::addNeighbor(const NeighborInfo& info)
         return;
     }
 
-    if (hostIntf != nullptr)
+    for (auto& hostIntf : hostIntfs)
     {
-        if (hostIntf->getifindex() == info.ifidx)
+        if (hostIntf.second->getifindex() == info.ifidx)
         {
             return;
         }
@@ -552,9 +549,9 @@ void Manager::removeNeighbor(const NeighborInfo& info)
         return;
     }
 
-    if (hostIntf != nullptr)
+    for (auto& hostIntf : hostIntfs)
     {
-        if (hostIntf->getifindex() == info.ifidx)
+        if (hostIntf.second->getifindex() == info.ifidx)
         {
             return;
         }
@@ -573,9 +570,9 @@ void Manager::removeNeighbor(const NeighborInfo& info)
 
 void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
 {
-    if (hostIntf != nullptr)
+    for (auto& hostIntf : hostIntfs)
     {
-        if (hostIntf->getifindex() == ifidx)
+        if (hostIntf.second->getifindex() == ifidx)
         {
             return;
         }
@@ -592,9 +589,10 @@ void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
                     {
                         if (!it1->second->EthernetInterfaceIntf::dhcp4())
                         {
-                            const config::Parser& ifaceConfig(fs::path(
-                                fmt::format("{}/{}", INTERFACE_CONF_DIR,
-                                            it1->second->interfaceName())));
+                            const config::Parser& ifaceConfig(
+                                config::pathForIntfConf(
+                                    getConfDir(),
+                                    it1->second->interfaceName()));
                             auto gw4 = stdplus::fromStr<stdplus::In4Addr>(
                                 getIPv4DefaultGateway(ifaceConfig));
                             it->second.defgw4.emplace(gw4);
@@ -622,9 +620,9 @@ void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
                     {
                         if (!it->second->EthernetInterfaceIntf::dhcp4())
                         {
-                            const config::Parser& ifaceConfig(fs::path(
-                                fmt::format("{}/{}", INTERFACE_CONF_DIR,
-                                            it->second->interfaceName())));
+                            const config::Parser& ifaceConfig(
+                                config::pathForIntfConf(
+                                    getConfDir(), it->second->interfaceName()));
                             it->second->EthernetInterfaceIntf::defaultGateway(
                                 getIPv4DefaultGateway(ifaceConfig));
                         }
@@ -666,16 +664,12 @@ void Manager::addDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
 
 void Manager::removeDefGw(unsigned ifidx, stdplus::InAnyAddr addr)
 {
-    if (hostIntf != nullptr)
+    if (auto it = intfInfo.find(ifidx); it != intfInfo.end())
     {
-        if (hostIntf->getifindex() == ifidx)
+        if (it->second.intf.name.value().find("hostusb") != std::string::npos)
         {
             return;
         }
-    }
-
-    if (auto it = intfInfo.find(ifidx); it != intfInfo.end())
-    {
         std::visit(
             [&](auto addr) {
                 if constexpr (std::is_same_v<stdplus::In4Addr, decltype(addr)>)
