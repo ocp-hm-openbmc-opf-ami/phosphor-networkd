@@ -177,8 +177,9 @@ class Manager : public ManagerIface
 
     /** @brief HostInterface dbus objects and their names
      */
-    std::unique_ptr<phosphor::network::hostintf::HostInterface> hostIntf =
-        nullptr;
+    stdplus::string_umap<
+        std::unique_ptr<phosphor::network::hostintf::HostInterface>>
+        hostIntfs;
 
     /** @brief Adds a hook that runs immediately prior to reloading
      *

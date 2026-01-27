@@ -1,4 +1,6 @@
 #pragma once
+#include "config.h"
+
 #include "types.hpp"
 #include "xyz/openbmc_project/Network/IP/Create/server.hpp"
 
@@ -128,7 +130,19 @@ class HostInterface : public hostIfaces
 
     std::string InterfaceName() const
     {
-        return std::string(intfName);
+        return intfName;
+    }
+
+    std::string defaultIpAddress(std::string ifname) const
+    {
+        if (ifname.find("hostusb0") != std::string::npos)
+        {
+            return "169.254.0.17";
+        }
+        else
+        {
+            return "169.254.10.17";
+        }
     }
 
     uint8_t getifindex() const
@@ -146,7 +160,7 @@ class HostInterface : public hostIfaces
 
   private:
     static constexpr const char HOST_INTERFACE_CONF_DIR[] = "/etc/interface";
-    static constexpr const char* intfName = "hostusb0";
+    std::string intfName;
     static constexpr const char* ethIntf =
         "xyz.openbmc_project.Network.EthernetInterface";
 
@@ -156,7 +170,6 @@ class HostInterface : public hostIfaces
     const std::string backupGatewayMACAddress = "";
     const bool nicEnabled = true;
 
-    const std::string defaultIpAddress = "169.254.0.17";
     const uint8_t defaultPrefixLength = 16;
 
     /** @brief Persistent sdbusplus DBus bus connection. */

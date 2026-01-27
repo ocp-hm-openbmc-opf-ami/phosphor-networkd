@@ -2237,19 +2237,16 @@ void EthernetInterface::writeConfigurationFile()
                 auto& address = network["Address"];
                 for (const auto& addr : addrs)
                 {
-                    if ((addr.second->type() == IP::Protocol::IPv6 &&
-                         !dhcp6() && EthernetInterfaceIntf::ipv6Enable()) ||
-                        (addr.second->type() == IP::Protocol::IPv4 ||
-                         !dhcp4() && EthernetInterfaceIntf::ipv4Enable()))
+                    if (addr.second->origin() == IP::AddressOrigin::Static)
                     {
+                        if ((addr.second->type() == IP::Protocol::IPv6 &&
+                             EthernetInterfaceIntf::ipv6Enable()) ||
+                            (addr.second->type() == IP::Protocol::IPv4 &&
+                             EthernetInterfaceIntf::ipv4Enable()))
                         {
-                            if (addr.second->origin() ==
-                                IP::AddressOrigin::Static)
-                            {
-                                address.emplace_back(
-                                    fmt::format("{}/{}", addr.second->address(),
-                                                addr.second->prefixLength()));
-                            }
+                            address.emplace_back(
+                                fmt::format("{}/{}", addr.second->address(),
+                                            addr.second->prefixLength()));
                         }
                     }
                 }
@@ -2966,6 +2963,13 @@ bool EthernetInterface::ipv6Enable(bool value)
         std::system(
             fmt::format("ip link set dev {} up", interfaceName()).c_str());
         EthernetInterfaceIntf::ipv6Enable(value);
+
+        for (const auto& saved : savedStaticIPv6Addrs)
+        {
+            ip(IP::Protocol::IPv6, saved.address, saved.prefixLength,
+               saved.gateway);
+        }
+
         writeConfigurationFile();
         manager.get().reloadConfigs();
     }
@@ -2996,6 +3000,20 @@ bool EthernetInterface::ipv6Enable(bool value)
             }
         }
         preDhcp6State = EthernetInterfaceIntf::dhcp6();
+        savedStaticIPv6Addrs.clear();
+        for (const auto& [_, addr] : addrs)
+        {
+            if (addr->type() == IP::Protocol::IPv6 &&
+                addr->origin() == IP::AddressOrigin::Static)
+            {
+                SavedIPAddr saved;
+                saved.address = addr->address();
+                saved.prefixLength = addr->prefixLength();
+                saved.gateway = addr->gateway();
+                savedStaticIPv6Addrs.push_back(saved);
+            }
+        }
+
         if (dhcp6())
         {
             manager.get().addReloadPostHook([&]() {
@@ -3014,6 +3032,19 @@ bool EthernetInterface::ipv6Enable(bool value)
             std::system(fmt::format("ip -6 addr flush dev {}", interfaceName())
                             .c_str());
         }
+
+        for (auto it = addrs.begin(); it != addrs.end();)
+        {
+            if (it->second->type() == IP::Protocol::IPv6)
+            {
+                it = addrs.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
         EthernetInterfaceIntf::dhcp6(false);
         EthernetInterfaceIntf::ipv6Enable(value);
         writeConfigurationFile();

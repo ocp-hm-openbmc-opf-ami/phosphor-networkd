@@ -79,6 +79,12 @@ HostIPAddress::HostIPAddress(
              true);
     IP::origin(origin, true);
     IP::idx(idx, true);
+
+#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
+    execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
+            parent.get().InterfaceName().c_str(), "UP");
+
+#endif
     emit_object_added();
 }
 
@@ -224,6 +230,11 @@ int HostInterface::configureHostInterface(const std::string& ipaddress,
         return -1;
     }
 
+#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
+    execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
+            intfName.c_str(), "UP");
+#endif
+
     close(sockfd);
     return 0;
 }
@@ -234,6 +245,7 @@ HostInterface::HostInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     hostIfaces(bus, objPath.c_str(), hostIfaces::action::defer_emit), bus(bus),
     objPath(std::string(objPath))
 {
+    intfName = std::string(info.name.value());
     const config::Parser& config(
         config::pathForIntfConf(HOST_INTERFACE_CONF_DIR, intfName));
 
@@ -241,7 +253,7 @@ HostInterface::HostInterface(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     auto value = config.map.getLastValueString("Network", "IPAddress");
     if (value == nullptr)
     {
-        ipaddress = defaultIpAddress;
+        ipaddress = defaultIpAddress(intfName);
     }
     else
     {
@@ -337,6 +349,11 @@ void HostInterface::addAddr(const AddressInfo& info)
                                         addr->address(), addr->prefixLength(),
                                         intfName)
                                 .c_str());
+#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
+                        execute("/usr/bin/ipv4-advanced-route.sh",
+                                "ipv4-advanced-route.sh", intfName.c_str(),
+                                "DOWN");
+#endif
                     }
                 }
             }
