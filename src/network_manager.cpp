@@ -141,7 +141,16 @@ Manager::Manager(stdplus::PinnedRef<sdbusplus::bus_t> bus,
         }
 
 #ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-        self.get().advanced_route_cond_var.notify_one();
+        for (auto it = self.get().interfaces.begin();
+             it != self.get().interfaces.end(); it++)
+        {
+            auto ifname = it->first;
+            execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
+                    ifname.c_str(), it->second->linkUp() ? "UP" : "DOWN");
+
+            execute("/usr/bin/ipv6-advanced-route.sh", "ipv6-advanced-route.sh",
+                    ifname.c_str(), it->second->linkUp() ? "UP" : "DOWN");
+        }
 #endif
         self.get().reloadPostHooks.clear();
     });
@@ -192,11 +201,6 @@ Manager::Manager(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     initCompleted = false;
     signals = initSignals();
     registerSignal(bus);
-
-#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-    advanced_route_lock = std::unique_lock(advanced_route_mutex);
-    advanced_route_worker = std::thread(&Manager::AdvancedRoute, this);
-#endif
 
     initSupportedPrivilges();
 }
@@ -983,6 +987,23 @@ void Manager::registerSignal(sdbusplus::bus::bus& bus)
                                                     it->first)
                                                     .c_str());
                                         }
+#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
+                                        {
+                                            execute(
+                                                "/usr/bin/ipv4-advanced-route.sh",
+                                                "ipv4-advanced-route.sh",
+                                                it->second->interfaceName()
+                                                    .c_str(),
+                                                "UP");
+
+                                            execute(
+                                                "/usr/bin/ipv6-advanced-route.sh",
+                                                "ipv6-advanced-route.sh",
+                                                it->second->interfaceName()
+                                                    .c_str(),
+                                                "UP");
+                                        }
+#endif
                                     }
                                 }
                                 initCompleted = true;
@@ -1113,34 +1134,6 @@ void Manager::setConfDir(const fs::path& dir)
     }
 #endif
 }
-
-Manager::~Manager()
-{
-#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-    advanced_route_worker.std::thread::~thread();
-#endif
-}
-
-#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-void Manager::AdvancedRoute()
-{
-    while (true)
-    {
-        advanced_route_cond_var.wait(advanced_route_lock);
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-
-        for (auto it = interfaces.begin(); it != interfaces.end(); it++)
-        {
-            auto ifname = it->first;
-            execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
-                    ifname.c_str(), it->second->linkUp() ? "UP" : "DOWN");
-
-            execute("/usr/bin/ipv6-advanced-route.sh", "ipv6-advanced-route.sh",
-                    ifname.c_str(), it->second->linkUp() ? "UP" : "DOWN");
-        }
-    }
-}
-#endif
 
 #if ENABLE_BOND_SUPPORT
 ObjectPath Manager::bond(std::string activeSlave, uint8_t miiMonitor)

@@ -71,19 +71,21 @@ IPAddress::IPAddress(sdbusplus::bus_t& bus,
     emit_object_added();
 
 #ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-    if (type() == IP::Protocol::IPv4 &&
-        IP::origin() != IP::AddressOrigin::LinkLocal)
+    if (parent.get().manager.get().initCompleted)
     {
-        execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
-                parent.get().interfaceName().c_str(), "UP");
+        if (type() == IP::Protocol::IPv4 &&
+            IP::origin() != IP::AddressOrigin::LinkLocal)
+        {
+            execute("/usr/bin/ipv4-advanced-route.sh", "ipv4-advanced-route.sh",
+                    parent.get().interfaceName().c_str(), "UP");
+        }
+        else if (type() == IP::Protocol::IPv6 &&
+                 IP::origin() != IP::AddressOrigin::LinkLocal)
+        {
+            execute("/usr/bin/ipv6-advanced-route.sh", "ipv6-advanced-route.sh",
+                    parent.get().interfaceName().c_str(), "UP");
+        }
     }
-    else if (type() == IP::Protocol::IPv6 &&
-             IP::origin() != IP::AddressOrigin::LinkLocal)
-    {
-        execute("/usr/bin/ipv6-advanced-route.sh", "ipv6-advanced-route.sh",
-                parent.get().interfaceName().c_str(), "UP");
-    }
-
 #endif
 }
 

@@ -57,7 +57,6 @@ class Manager : public ManagerIface
   public:
     Manager(Manager&&) = delete;
     Manager& operator=(Manager&&) = delete;
-    ~Manager();
 
     /** @brief Constructor to put object onto bus at a dbus path.
      *  @param[in] bus - Bus to attach to.
@@ -210,11 +209,6 @@ class Manager : public ManagerIface
 
     bool initCompleted;
 
-#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-    /** @brief Used to notify/wait to exexute advanced-route */
-    std::condition_variable advanced_route_cond_var;
-#endif
-
   protected:
     /** @brief Handle to the object used to trigger reloads of networkd. */
     stdplus::PinnedRef<DelayedExecutor> reload;
@@ -282,14 +276,6 @@ class Manager : public ManagerIface
         initSignals();
 
     void registerSignal(sdbusplus::bus::bus& bus);
-
-  private:
-#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-    std::thread advanced_route_worker;
-    void AdvancedRoute();
-    std::unique_lock<std::mutex> advanced_route_lock;
-    std::mutex advanced_route_mutex;
-#endif
 };
 
 } // namespace network
