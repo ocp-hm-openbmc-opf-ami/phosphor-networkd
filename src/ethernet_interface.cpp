@@ -1193,6 +1193,10 @@ bool EthernetInterface::dhcp6(bool value)
                     }
                 }
             }
+#ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
+            execute("/usr/bin/ipv6-advanced-route.sh", "ipv6-advanced-route.sh",
+                    interfaceName().c_str(), "UP");
+#endif
         });
 
         writeConfigurationFile();
