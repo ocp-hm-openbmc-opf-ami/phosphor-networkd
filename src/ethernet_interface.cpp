@@ -3073,15 +3073,30 @@ bool EthernetInterface::ipv4Enable(bool value)
         {
             EthernetInterfaceIntf::dhcp4(true);
         }
-
+        std::system(
+            fmt::format("ip link set dev {} down", interfaceName()).c_str());
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::system(
+            fmt::format("ip link set dev {} up", interfaceName()).c_str());
         EthernetInterfaceIntf::ipv4Enable(value);
+        for (const auto& saved : savedStaticIPv4Addrs)
+        {
+            try
+            {
+                auto addrObj =
+                    stdplus::fromStr<stdplus::In4Addr>(saved.address);
+                stdplus::SubnetAny subnet(addrObj, saved.prefixLength);
+                addrs[subnet] = std::make_unique<IPAddress>(
+                    bus, std::string_view(objPath), *this, subnet,
+                    IP::AddressOrigin::Static, 0);
+            }
+            catch (const std::exception& e)
+            {
+                lg2::error("Failed to restore IPv4 address {ADDR}: {ERROR}",
+                           "ADDR", saved.address, "ERROR", e);
+            }
+        }
         writeConfigurationFile();
-        manager.get().addReloadPostHook([ifname = interfaceName()]() {
-            std::system(fmt::format("ip link set dev {} down", ifname).c_str());
-            std::this_thread::sleep_for(std::chrono::seconds(3));
-            std::system(fmt::format("ip link set dev {} up", ifname).c_str());
-        });
-
         manager.get().reloadConfigs();
     }
     else
@@ -3111,30 +3126,29 @@ bool EthernetInterface::ipv4Enable(bool value)
             }
         }
         std::this_thread::sleep_for(std::chrono::seconds(10));
+        savedStaticIPv4Addrs.clear();
+        for (const auto& [_, addr] : addrs)
+        {
+            if (addr->type() == IP::Protocol::IPv4 &&
+                addr->origin() == IP::AddressOrigin::Static)
+            {
+                SavedIPAddr saved;
+                saved.address = addr->address();
+                saved.prefixLength = addr->prefixLength();
+                saved.gateway = addr->gateway();
+                savedStaticIPv4Addrs.push_back(saved);
+            }
+        }
+        lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
+                  interfaceName());
+        std::system(
+            fmt::format("ip -4 addr flush dev {}", interfaceName()).c_str());
         preDhcp4State = EthernetInterfaceIntf::dhcp4();
-        if (dhcp4())
-        {
-            manager.get().addReloadPostHook([&]() {
-                lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
-                          interfaceName());
-                std::system(
-                    fmt::format("ip -4 addr flush dev {}", interfaceName())
-                        .c_str());
-            });
-        }
-        else
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(10));
-            lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
-                      interfaceName());
-            std::system(fmt::format("ip -4 addr flush dev {}", interfaceName())
-                            .c_str());
-        }
         EthernetInterfaceIntf::dhcp4(false);
-        EthernetInterfaceIntf::ipv4Enable(value);
-        writeConfigurationFile();
-        manager.get().reloadConfigs();
     }
+    EthernetInterfaceIntf::ipv4Enable(value);
+    writeConfigurationFile();
+    manager.get().reloadConfigs();
     return value;
 }
 
