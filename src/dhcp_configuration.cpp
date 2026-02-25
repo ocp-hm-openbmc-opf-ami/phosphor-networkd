@@ -101,6 +101,10 @@ bool Configuration::sendHostNameEnabled(bool value)
     auto name = ConfigIntf::sendHostNameEnabled(value);
     parent.get().writeConfigurationFile();
     parent.get().reloadConfigs();
+
+    // Trigger DNS registration after sendHostname configuration changes
+    parent.get().manager.get().getDNSConf().doNsupdate();
+
     return name;
 }
 
