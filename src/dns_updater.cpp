@@ -628,6 +628,10 @@ int16_t Configuration::toRegister()
                     lg2::info(cmd.c_str());
                     std::string revIP =
                         ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
+                    cmd = fmt::format("update delete {} PTR\n", revIP);
+                    // There must be a blank line between PTR and A/AAAA record
+                    ofs << cmd << std::endl;
+                    lg2::info(cmd.c_str());
                     cmd = fmt::format("update add {} {} PTR {}.{}\n", revIP,
                                       TTL, hostname, domainName);
                     // There must be a blank line between PTR and A/AAAA record
