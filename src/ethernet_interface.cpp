@@ -1043,22 +1043,25 @@ ObjectPath EthernetInterface::neighbor(
                        bus, std::string_view(objPath), *this, *addr, *lladdr,
                        prefixLength, Neighbor::State::Permanent)));
 #ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-        manager.get().addReloadPostHook([&]() {
-            stdplus::In4Addr* inaddr =
-                std::get_if<stdplus::In4Addr>(&(addr.value()));
-            if (inaddr != nullptr)
-            {
-                execute("/usr/bin/ipv4-advanced-route.sh",
-                        "ipv4-advanced-route.sh", interfaceName().c_str(),
-                        "UP");
-            }
-            else
-            {
-                execute("/usr/bin/ipv6-advanced-route.sh",
-                        "ipv6-advanced-route.sh", interfaceName().c_str(),
-                        "UP");
-            }
-        });
+        if (manager.get().initCompleted)
+        {
+            manager.get().addReloadPostHook([&]() {
+                stdplus::In4Addr* inaddr =
+                    std::get_if<stdplus::In4Addr>(&(addr.value()));
+                if (inaddr != nullptr)
+                {
+                    execute("/usr/bin/ipv4-advanced-route.sh",
+                            "ipv4-advanced-route.sh", interfaceName().c_str(),
+                            "UP");
+                }
+                else
+                {
+                    execute("/usr/bin/ipv6-advanced-route.sh",
+                            "ipv6-advanced-route.sh", interfaceName().c_str(),
+                            "UP");
+                }
+            });
+        }
 #endif
     }
     else
