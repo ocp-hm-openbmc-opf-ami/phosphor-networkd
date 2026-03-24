@@ -1135,6 +1135,14 @@ bool EthernetInterface::dhcp4(bool value)
         }
         else
         {
+            if (EthernetInterfaceIntf::staticNameServers().empty())
+            {
+                auto currentDNS = getNameServerFromResolvd();
+                if (!currentDNS.empty())
+                {
+                    EthernetInterfaceIntf::staticNameServers(currentDNS);
+                }
+            }
             for (auto& addr : addrs)
             {
                 if (addr.second->type() == IP::Protocol::IPv4)

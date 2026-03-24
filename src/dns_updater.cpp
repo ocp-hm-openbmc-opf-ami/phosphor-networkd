@@ -581,32 +581,6 @@ int16_t Configuration::toRegister()
                             continue;
                     }
 
-		    bool sendHostnameEnabled = false;
-                    if (ipv6)
-                    {
-                        if (iface->second->dhcp6Conf &&
-                            iface->second->dhcp6Conf->sendHostNameEnabled())
-                        {
-                            sendHostnameEnabled = true;
-                        }
-                    }
-                    else
-                    {
-                        if (iface->second->dhcp4Conf &&
-                            iface->second->dhcp4Conf->sendHostNameEnabled())
-                        {
-                            sendHostnameEnabled = true;
-                        }
-                    }
-
-                    if (!sendHostnameEnabled)
-                    {
-                        lg2::info(
-                            "Skipping {IP} - SendHostname disabled for {INAME}",
-                            "IP", ip, "INAME", iName);
-                        continue;
-                    }
-
                     ofs.open(
                         fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE, iName, i)
                             .c_str());
