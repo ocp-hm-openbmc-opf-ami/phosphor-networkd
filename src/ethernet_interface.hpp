@@ -555,6 +555,7 @@ class EthernetInterface : public Ifaces
         std::string gateway;
     };
     std::vector<SavedIPAddr> savedStaticIPv6Addrs;
+    std::vector<SavedIPAddr> savedStaticIPv4Addrs;
     std::unique_ptr<std::thread> vlanMonitorThread;
 
     std::mutex vlanMutex;
