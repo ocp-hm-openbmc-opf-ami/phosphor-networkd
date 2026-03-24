@@ -1043,22 +1043,25 @@ ObjectPath EthernetInterface::neighbor(
                        bus, std::string_view(objPath), *this, *addr, *lladdr,
                        prefixLength, Neighbor::State::Permanent)));
 #ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
-        manager.get().addReloadPostHook([&]() {
-            stdplus::In4Addr* inaddr =
-                std::get_if<stdplus::In4Addr>(&(addr.value()));
-            if (inaddr != nullptr)
-            {
-                execute("/usr/bin/ipv4-advanced-route.sh",
-                        "ipv4-advanced-route.sh", interfaceName().c_str(),
-                        "UP");
-            }
-            else
-            {
-                execute("/usr/bin/ipv6-advanced-route.sh",
-                        "ipv6-advanced-route.sh", interfaceName().c_str(),
-                        "UP");
-            }
-        });
+        if (manager.get().initCompleted)
+        {
+            manager.get().addReloadPostHook([&]() {
+                stdplus::In4Addr* inaddr =
+                    std::get_if<stdplus::In4Addr>(&(addr.value()));
+                if (inaddr != nullptr)
+                {
+                    execute("/usr/bin/ipv4-advanced-route.sh",
+                            "ipv4-advanced-route.sh", interfaceName().c_str(),
+                            "UP");
+                }
+                else
+                {
+                    execute("/usr/bin/ipv6-advanced-route.sh",
+                            "ipv6-advanced-route.sh", interfaceName().c_str(),
+                            "UP");
+                }
+            });
+        }
 #endif
     }
     else
@@ -1333,6 +1336,18 @@ size_t EthernetInterface::mtu(size_t value)
 
 bool EthernetInterface::nicEnabled(bool value)
 {
+#if ENABLE_BOND_SUPPORT
+    if (interfaceName() != bondIfcName &&
+        manager.get().interfaces.find(bondIfcName) !=
+            manager.get().interfaces.end())
+    {
+        lg2::error("Unable to enable/disable slave interface {IFACE}", "IFACE",
+                   interfaceName());
+        elog<InvalidArgument>(
+            Argument::ARGUMENT_NAME("IFACE"),
+            Argument::ARGUMENT_VALUE(interfaceName().c_str()));
+    }
+#endif
 #ifdef AMI_NCSI_SUPPORT
     if (std::string{DEFAULT_NCSI_INTERFACE}.find(interfaceName()) !=
         std::string::npos)
@@ -1623,6 +1638,20 @@ ObjectPath EthernetInterface::createBond(std::string activeSlave,
             log<level::ERR>("Bond cannot be enabled as VLAN is enabled");
             elog<NotAllowed>(NotAllowedArgument::REASON(
                 "Bond cannot be enabled as VLAN is enabled"));
+        }
+
+        if (!intf->EthernetInterfaceIntf::nicEnabled())
+        {
+            log<level::ERR>(
+                fmt::format(
+                    "Bond cannot be enabled as slave interface {} is disabled",
+                    intf->interfaceName())
+                    .c_str());
+            elog<NotAllowed>(NotAllowedArgument::REASON(
+                fmt::format(
+                    "Bond cannot be enabled as slave interface {} is disabled",
+                    intf->interfaceName())
+                    .c_str()));
         }
     }
 
@@ -3073,15 +3102,30 @@ bool EthernetInterface::ipv4Enable(bool value)
         {
             EthernetInterfaceIntf::dhcp4(true);
         }
-
+        std::system(
+            fmt::format("ip link set dev {} down", interfaceName()).c_str());
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::system(
+            fmt::format("ip link set dev {} up", interfaceName()).c_str());
         EthernetInterfaceIntf::ipv4Enable(value);
+        for (const auto& saved : savedStaticIPv4Addrs)
+        {
+            try
+            {
+                auto addrObj =
+                    stdplus::fromStr<stdplus::In4Addr>(saved.address);
+                stdplus::SubnetAny subnet(addrObj, saved.prefixLength);
+                addrs[subnet] = std::make_unique<IPAddress>(
+                    bus, std::string_view(objPath), *this, subnet,
+                    IP::AddressOrigin::Static, 0);
+            }
+            catch (const std::exception& e)
+            {
+                lg2::error("Failed to restore IPv4 address {ADDR}: {ERROR}",
+                           "ADDR", saved.address, "ERROR", e);
+            }
+        }
         writeConfigurationFile();
-        manager.get().addReloadPostHook([ifname = interfaceName()]() {
-            std::system(fmt::format("ip link set dev {} down", ifname).c_str());
-            std::this_thread::sleep_for(std::chrono::seconds(3));
-            std::system(fmt::format("ip link set dev {} up", ifname).c_str());
-        });
-
         manager.get().reloadConfigs();
     }
     else
@@ -3111,30 +3155,29 @@ bool EthernetInterface::ipv4Enable(bool value)
             }
         }
         std::this_thread::sleep_for(std::chrono::seconds(10));
+        savedStaticIPv4Addrs.clear();
+        for (const auto& [_, addr] : addrs)
+        {
+            if (addr->type() == IP::Protocol::IPv4 &&
+                addr->origin() == IP::AddressOrigin::Static)
+            {
+                SavedIPAddr saved;
+                saved.address = addr->address();
+                saved.prefixLength = addr->prefixLength();
+                saved.gateway = addr->gateway();
+                savedStaticIPv4Addrs.push_back(saved);
+            }
+        }
+        lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
+                  interfaceName());
+        std::system(
+            fmt::format("ip -4 addr flush dev {}", interfaceName()).c_str());
         preDhcp4State = EthernetInterfaceIntf::dhcp4();
-        if (dhcp4())
-        {
-            manager.get().addReloadPostHook([&]() {
-                lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
-                          interfaceName());
-                std::system(
-                    fmt::format("ip -4 addr flush dev {}", interfaceName())
-                        .c_str());
-            });
-        }
-        else
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(10));
-            lg2::info("Flush IPv4 address on dev {NAME}\n", "NAME",
-                      interfaceName());
-            std::system(fmt::format("ip -4 addr flush dev {}", interfaceName())
-                            .c_str());
-        }
         EthernetInterfaceIntf::dhcp4(false);
-        EthernetInterfaceIntf::ipv4Enable(value);
-        writeConfigurationFile();
-        manager.get().reloadConfigs();
     }
+    EthernetInterfaceIntf::ipv4Enable(value);
+    writeConfigurationFile();
+    manager.get().reloadConfigs();
     return value;
 }
 

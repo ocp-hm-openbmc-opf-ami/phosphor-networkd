@@ -857,7 +857,7 @@ void Configuration::restoreConfigurationFile()
 template <typename T>
 void Configuration::appendPreloadRules()
 {
-#if SYSTEM_FIREWALL_SUPPORT
+#ifdef DISABLE_PING_FEATURE_SUPPORT
     if (typeid(T) == typeid(in_addr))
     {
         // Add IPv4 Preload Rules here

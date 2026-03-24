@@ -382,12 +382,15 @@ int16_t Configuration::toDeregister()
 
     if (!sendNsupdateEnabled() && !NsupdateEnabledChanged)
     {
-        lg2::error("sendNsupdateEnabled is not enabled...\n");
-        return -1;
+        lg2::warning("sendNsupdateEnabled is not enabled...\n");
+        return 0;
     }
 
     if (updateDNSInfo(true) == -1)
-        return -1;
+    {
+        lg2::info("Backup config incomplete, skipping deregistration\n");
+        return 0;
+    }
     auto [setting, hostname] = preHost;
     for (auto it = preIfaceConf.begin(); it != preIfaceConf.end(); it++)
     {
@@ -494,6 +497,7 @@ int16_t Configuration::toDeregister()
         }
 
         dnsWorkq.push([iName]() {
+            std::this_thread::sleep_for(std::chrono::seconds(5));
             execute("/usr/bin/nsupdate.sh", "nsupdate.sh", "deregister",
                     iName.c_str());
         });
@@ -511,8 +515,8 @@ int16_t Configuration::toRegister()
 
     if (!sendNsupdateEnabled())
     {
-        lg2::error("sendNsupdateEnabled is not enabled...\n");
-        return -1;
+        lg2::warning("sendNsupdateEnabled is not enabled...\n");
+        return 0;
     }
 
     auto [setting, hostname] = ddnsIface::hostConf();
@@ -549,6 +553,7 @@ int16_t Configuration::toRegister()
             continue;
         }
 
+        std::this_thread::sleep_for(std::chrono::seconds(3));
         std::vector<std::string> domainNames = getDomainName(iName);
         if (domainNames.empty())
         {
@@ -559,6 +564,7 @@ int16_t Configuration::toRegister()
         auto i = 1;
         for (auto& domainName : domainNames)
         {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
             std::vector<std::string> dnsServers = getDNSServer(iName);
             if (dnsServers.empty())
             {
@@ -581,6 +587,33 @@ int16_t Configuration::toRegister()
                         if (IN6_IS_ADDR_LINKLOCAL((in6_addr*)&tmp))
                             continue;
                     }
+
+		    bool sendHostnameEnabled = false;
+                    if (ipv6)
+                    {
+                        if (iface->second->dhcp6Conf &&
+                            iface->second->dhcp6Conf->sendHostNameEnabled())
+                        {
+                            sendHostnameEnabled = true;
+                        }
+                    }
+                    else
+                    {
+                        if (iface->second->dhcp4Conf &&
+                            iface->second->dhcp4Conf->sendHostNameEnabled())
+                        {
+                            sendHostnameEnabled = true;
+                        }
+                    }
+
+                    if (!sendHostnameEnabled)
+                    {
+                        lg2::info(
+                            "Skipping {IP} - SendHostname disabled for {INAME}",
+                            "IP", ip, "INAME", iName);
+                        continue;
+                    }
+
                     ofs.open(
                         fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE, iName, i)
                             .c_str());
@@ -602,6 +635,10 @@ int16_t Configuration::toRegister()
                     lg2::info(cmd.c_str());
                     std::string revIP =
                         ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
+                    cmd = fmt::format("update delete {} PTR\n", revIP);
+                    // There must be a blank line between PTR and A/AAAA record
+                    ofs << cmd << std::endl;
+                    lg2::info(cmd.c_str());
                     cmd = fmt::format("update add {} {} PTR {}.{}\n", revIP,
                                       TTL, hostname, domainName);
                     // There must be a blank line between PTR and A/AAAA record
@@ -614,6 +651,7 @@ int16_t Configuration::toRegister()
         }
 
         dnsWorkq.push([iName]() {
+            std::this_thread::sleep_for(std::chrono::seconds(5));
             execute("/usr/bin/nsupdate.sh", "nsupdate.sh", "register",
                     iName.c_str());
         });
@@ -702,6 +740,7 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                 manager.get().reconfigLink(it->second->getIfIdx());
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
+        std::this_thread::sleep_for(std::chrono::seconds(3));
         toRegister();
     }
 
@@ -1301,6 +1340,7 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
 #endif
     if (fs::exists(filePath))
     {
+        conf.setFile(filePath);
         if (!conf.map.getLastValueString("HostConf", "Automatic") ||
             !conf.map.getLastValueString("HostConf", "Hostname") ||
             !conf.map.getLastValueString("mDNS", "UseMDNS") ||
@@ -1309,7 +1349,6 @@ int16_t Configuration::updateDNSInfo(bool bakupInfo)
             log<level::ERR>("Skipping host update due to missing values");
             return -1;
         }
-        conf.setFile(filePath);
         {
             tmpHost = std::make_tuple(
                 *conf.map.getLastValueString("HostConf", "Automatic") == "true"

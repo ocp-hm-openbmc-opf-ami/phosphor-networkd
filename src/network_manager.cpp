@@ -190,8 +190,10 @@ Manager::Manager(stdplus::PinnedRef<sdbusplus::bus_t> bus,
     std::filesystem::create_directories(confDir);
     systemConf = std::make_unique<phosphor::network::SystemConfiguration>(
         bus, (this->objPath / "config").str, *this);
+#ifdef SYSTEM_FIREWALL_SUPPORT
     firewallConf = std::make_unique<phosphor::network::firewall::Configuration>(
         bus, (this->objPath / "firewall").str, *this);
+#endif
 #if NSUPDATE_SUPPORT
     ddnsConf = std::make_unique<phosphor::network::dns::Configuration>(
         bus, (this->objPath / "dns").str, *this);
@@ -789,8 +791,7 @@ bool Manager::createDefaultARPControlFiles(bool force)
             }
         }
 
-        auto interfaceStrList = phosphor::network::getInterfaces();
-        for (const auto& interface : interfaceStrList)
+        for (const auto& [interface, _] : interfaces)
         {
             // if the interface has '.' in the name, it means that this is a
             // VLAN - don't create the network file.

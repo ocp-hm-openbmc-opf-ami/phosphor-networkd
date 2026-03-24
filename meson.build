@@ -30,7 +30,14 @@ conf_data.set10('NCSI_FLOW_CONTROL', get_option('ncsi-flow-control'))
 conf_data.set10('NCSI_KEEP_PHY_LINK_UP', get_option('ncsi-keep-phy-link-up'))
 conf_data.set10('AMI_NCSI_SUPPORT', get_option('enable-ncsi'))
 conf_data.set_quoted('DEFAULT_NCSI_INTERFACE', get_option('default-ncsi-interface'))
-conf_data.set10('SYSTEM_FIREWALL_SUPPORT', get_option('enable-system-firewall'))
+if (get_option('enable-system-firewall'))
+  conf_data.set10('SYSTEM_FIREWALL_SUPPORT', get_option('enable-system-firewall'))
+endif
+
+if (get_option('disable-ping-support'))
+  conf_data.set10('DISABLE_PING_FEATURE_SUPPORT', get_option('disable-ping-support'))
+endif
+
 conf_data.set10('ENABLE_BOND_SUPPORT', get_option('enable-bond-feature'))
 conf_data.set10('PHY_CONFIGURATION_SUPPORT', get_option('enable-phy-configuration'))
 conf_data.set10('NSUPDATE_SUPPORT', get_option('enable-nsupdate-feature'))
