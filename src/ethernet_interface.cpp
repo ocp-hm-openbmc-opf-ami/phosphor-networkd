@@ -1111,14 +1111,16 @@ bool EthernetInterface::dhcp4(bool value)
     {
         if (value)
         {
-            for (auto& addr : addrs)
-            {
-                if (addr.second->type() == IP::Protocol::IPv4)
+            manager.get().addReloadPostHook([&]() {
+                for (auto& addr : addrs)
                 {
-                    addr.second->delete_();
-                    break;
+                    if (addr.second->type() == IP::Protocol::IPv4)
+                    {
+                        addr.second->deleteAddrInterface();
+                        break;
+                    }
                 }
-            }
+            });
 
             if (!EthernetInterfaceIntf::defaultGateway().empty())
             {
@@ -1143,14 +1145,16 @@ bool EthernetInterface::dhcp4(bool value)
                     EthernetInterfaceIntf::staticNameServers(currentDNS);
                 }
             }
-            for (auto& addr : addrs)
-            {
-                if (addr.second->type() == IP::Protocol::IPv4)
+            manager.get().addReloadPostHook([&]() {
+                for (auto& addr : addrs)
                 {
-                    addr.second->delete_();
-                    break;
+                    if (addr.second->type() == IP::Protocol::IPv4)
+                    {
+                        addr.second->deleteAddrInterface();
+                        break;
+                    }
                 }
-            }
+            });
         }
         EthernetInterfaceIntf::dhcp4(value);
         writeConfigurationFile();
@@ -1198,7 +1202,7 @@ bool EthernetInterface::dhcp6(bool value)
                             (!dhcp6() &&
                              it->second->origin() == IP::AddressOrigin::DHCP))
                         {
-                            it->second->delete_();
+                            it->second->deleteAddrInterface();
                             break;
                         }
                     }
@@ -2281,9 +2285,11 @@ void EthernetInterface::writeConfigurationFile()
                     if (addr.second->origin() == IP::AddressOrigin::Static)
                     {
                         if ((addr.second->type() == IP::Protocol::IPv6 &&
-                             EthernetInterfaceIntf::ipv6Enable()) ||
+                             EthernetInterfaceIntf::ipv6Enable() &&
+                             !EthernetInterfaceIntf::dhcp6()) ||
                             (addr.second->type() == IP::Protocol::IPv4 &&
-                             EthernetInterfaceIntf::ipv4Enable()))
+                             EthernetInterfaceIntf::ipv4Enable() &&
+                             !EthernetInterfaceIntf::dhcp4()))
                         {
                             address.emplace_back(
                                 fmt::format("{}/{}", addr.second->address(),
