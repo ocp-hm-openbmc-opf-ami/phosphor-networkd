@@ -172,6 +172,8 @@ std::string getIPv4DefaultGateway(const config::Parser& config);
 
 std::string getMAC(const config::Parser& config);
 
+std::string getVLANPriority(const config::Parser& config);
+
 std::unordered_map<uint32_t, std::string> getDHCPVendorOption(
     const config::Parser& config, DHCPType dhcpType);
 
