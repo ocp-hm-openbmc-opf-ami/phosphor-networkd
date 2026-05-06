@@ -528,6 +528,9 @@ class EthernetInterface : public Ifaces
         void delete_() override;
         unsigned parentIdx;
         stdplus::PinnedRef<EthernetInterface> eth;
+
+        /** Set value of Priority */
+        uint32_t priority(uint32_t value) override;
     };
     std::optional<VlanProperties> vlan;
 

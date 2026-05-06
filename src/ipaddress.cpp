@@ -131,7 +131,8 @@ IP::AddressOrigin IPAddress::origin(IP::AddressOrigin /*origin*/)
 {
     elog<NotAllowed>(Reason("Property update is not allowed"));
 }
-void IPAddress::delete_()
+
+void IPAddress::deleteAddrInterface()
 {
     if (origin() != IP::AddressOrigin::Static)
     {
@@ -153,7 +154,11 @@ void IPAddress::delete_()
             break;
         }
     }
+}
 
+void IPAddress::delete_()
+{
+    deleteAddrInterface();
     parent.get().writeConfigurationFile();
     parent.get().manager.get().reloadConfigs();
 }

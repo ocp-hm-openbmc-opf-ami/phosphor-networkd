@@ -54,6 +54,10 @@ class IPAddress : public IPIfaces
 
     /** @brief Delete this d-bus object.
      */
+    void deleteAddrInterface();
+
+    /** @brief Delete this d-bus object and reload service.
+     */
     void delete_() override;
 
     using IP::address;

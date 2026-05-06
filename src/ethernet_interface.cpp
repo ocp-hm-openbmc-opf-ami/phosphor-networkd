@@ -1111,14 +1111,16 @@ bool EthernetInterface::dhcp4(bool value)
     {
         if (value)
         {
-            for (auto& addr : addrs)
-            {
-                if (addr.second->type() == IP::Protocol::IPv4)
+            manager.get().addReloadPostHook([&]() {
+                for (auto& addr : addrs)
                 {
-                    addr.second->delete_();
-                    break;
+                    if (addr.second->type() == IP::Protocol::IPv4)
+                    {
+                        addr.second->deleteAddrInterface();
+                        break;
+                    }
                 }
-            }
+            });
 
             if (!EthernetInterfaceIntf::defaultGateway().empty())
             {
@@ -1143,14 +1145,16 @@ bool EthernetInterface::dhcp4(bool value)
                     EthernetInterfaceIntf::staticNameServers(currentDNS);
                 }
             }
-            for (auto& addr : addrs)
-            {
-                if (addr.second->type() == IP::Protocol::IPv4)
+            manager.get().addReloadPostHook([&]() {
+                for (auto& addr : addrs)
                 {
-                    addr.second->delete_();
-                    break;
+                    if (addr.second->type() == IP::Protocol::IPv4)
+                    {
+                        addr.second->deleteAddrInterface();
+                        break;
+                    }
                 }
-            }
+            });
         }
         EthernetInterfaceIntf::dhcp4(value);
         writeConfigurationFile();
@@ -1198,7 +1202,7 @@ bool EthernetInterface::dhcp6(bool value)
                             (!dhcp6() &&
                              it->second->origin() == IP::AddressOrigin::DHCP))
                         {
-                            it->second->delete_();
+                            it->second->deleteAddrInterface();
                             break;
                         }
                     }
@@ -2281,9 +2285,11 @@ void EthernetInterface::writeConfigurationFile()
                     if (addr.second->origin() == IP::AddressOrigin::Static)
                     {
                         if ((addr.second->type() == IP::Protocol::IPv6 &&
-                             EthernetInterfaceIntf::ipv6Enable()) ||
+                             EthernetInterfaceIntf::ipv6Enable() &&
+                             !EthernetInterfaceIntf::dhcp6()) ||
                             (addr.second->type() == IP::Protocol::IPv4 &&
-                             EthernetInterfaceIntf::ipv4Enable()))
+                             EthernetInterfaceIntf::ipv4Enable() &&
+                             !EthernetInterfaceIntf::dhcp4()))
                         {
                             address.emplace_back(
                                 fmt::format("{}/{}", addr.second->address(),
@@ -2698,6 +2704,21 @@ EthernetInterface::VlanProperties::VlanProperties(
     parentIdx(*info.parent_idx), eth(eth)
 {
     VlanIntf::id(*info.vlan_id, true);
+    auto vlanConfig = config::pathForIntfDev(
+        eth.get().manager.get().getConfDir(), eth.get().interfaceName());
+    if (fs::exists(vlanConfig))
+    {
+        auto EgressQOSMaps = getVLANPriority(vlanConfig);
+        if (!EgressQOSMaps.empty())
+        {
+            if (auto priority = std::stoi(
+                    EgressQOSMaps.substr(EgressQOSMaps.find('-') + 1));
+                priority != 0)
+            {
+                VlanIntf::priority(priority, true);
+            }
+        }
+    }
     emit_object_added();
 }
 
@@ -2759,6 +2780,36 @@ void EthernetInterface::VlanProperties::delete_()
     }
 
     eth.get().manager.get().reloadConfigs();
+}
+
+uint32_t EthernetInterface::VlanProperties::priority(uint32_t value)
+{
+    if (value > 7 || value < 0)
+    {
+        elog<NotAllowed>(
+            NotAllowedArgument::REASON("The range of VLAN priorty is 0-7\n"));
+    }
+    if (value == VlanIntf::priority())
+    {
+        return value;
+    }
+    // write the device file for the vlan interface.
+    config::Parser config;
+    auto& netdev = config.map["NetDev"].emplace_back();
+    netdev["Name"].emplace_back(eth.get().interfaceName());
+    netdev["Kind"].emplace_back("vlan");
+    auto& vlan = config.map["VLAN"].emplace_back();
+    auto idStr = stdplus::toStr(VlanIntf::id());
+    vlan["Id"].emplace_back(std::move(idStr));
+    if (value != 0)
+    {
+        vlan["EgressQOSMaps"].emplace_back(fmt::format("0-{}", value));
+    }
+    config.writeFile(config::pathForIntfDev(
+        eth.get().manager.get().getConfDir(), eth.get().interfaceName()));
+    VlanIntf::priority(value, true);
+    eth.get().manager.get().reloadConfigs();
+    return value;
 }
 
 nlohmann::json EthernetInterface::readJsonFile(const std::string& configFile)

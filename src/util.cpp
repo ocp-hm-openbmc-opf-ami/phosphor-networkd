@@ -371,6 +371,19 @@ std::string getMAC(const config::Parser& config)
     }
 }
 
+std::string getVLANPriority(const config::Parser& config)
+{
+    if (auto str = config.map.getLastValueString("VLAN", "EgressQOSMaps");
+        str == nullptr)
+    {
+        return "";
+    }
+    else
+    {
+        return *str;
+    }
+}
+
 int getIP6StaticRtrPrefix(const config::Parser& config,
                           const std::string& Router)
 {
