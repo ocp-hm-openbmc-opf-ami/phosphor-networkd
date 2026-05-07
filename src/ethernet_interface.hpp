@@ -389,7 +389,7 @@ class EthernetInterface : public Ifaces
      *  @param[in] gateway - Gateway4 address.
      */
     std::tuple<std::optional<std::string>, uint8_t> getDwMacAddrByIP(
-        std::string gateway);
+        std::string gateway) const;
 
     /** Set value of LinkLocalAutoConf */
     LinkLocalConf linkLocalAutoConf(LinkLocalConf value) override;

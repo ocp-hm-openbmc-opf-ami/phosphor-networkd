@@ -3456,7 +3456,7 @@ EthernetInterface::Duplex EthernetInterface::duplex() const
 }
 
 std::tuple<std::optional<std::string>, uint8_t>
-    EthernetInterface::getDwMacAddrByIP(std::string gateway)
+    EthernetInterface::getDwMacAddrByIP(std::string gateway) const
 {
     int ret = 0;
     std::tuple<std::optional<std::string>, uint8_t> retVal(std::nullopt, 0);
@@ -4845,7 +4845,33 @@ std::string EthernetInterface::backupGateway(std::string value)
                 .c_str()));
     }
 
-    EthernetInterfaceIntf::backupGateway(value);
+    auto oldBackupGateway = EthernetInterfaceIntf::backupGateway();
+    if (!oldBackupGateway.empty())
+    {
+        manager.get().removeNeighbor(
+            NeighborInfo{.ifidx = ifIdx,
+                         .state = NUD_PERMANENT,
+                         .addr = stdplus::fromStr<stdplus::In4Addr>(
+                             oldBackupGateway)});
+    }
+
+    value = EthernetInterfaceIntf::backupGateway(std::move(value));
+
+    if (!value.empty())
+    {
+        auto [mac, prefixLength] = getDwMacAddrByIP(value);
+        if (mac.has_value())
+        {
+            manager.get().addNeighbor(NeighborInfo{
+                .ifidx = ifIdx,
+                .state = NUD_PERMANENT,
+                .addr = stdplus::fromStr<stdplus::In4Addr>(
+                    EthernetInterfaceIntf::backupGateway()),
+                .mac = stdplus::fromStr<stdplus::EtherAddr>(*mac),
+                .prefixLength = prefixLength});
+        }
+    }
+
     writeConfigurationFile();
     writeIfaceStateFile(interfaceName());
     manager.get().reloadConfigs();
@@ -4871,40 +4897,37 @@ std::string EthernetInterface::backupGatewayMACAddress() const
         return {};
     }
 
-    std::string command =
-        std::string("ip neigh get ") +
-        EthernetInterfaceIntf::backupGateway().c_str() + std::string(" dev ") +
-        interfaceName().c_str() + std::string(" 2>/dev/null");
-
-    char data[80] = {0};
-
-    FILE* fp = NULL;
-    fp = popen(command.c_str(), "r");
-    if (fp == NULL)
+    try
+    {
+        auto backupGwAddr =
+            stdplus::fromStr<stdplus::In4Addr>(EthernetInterfaceIntf::backupGateway());
+        if (auto it = staticNeighbors.find(backupGwAddr);
+            it != staticNeighbors.end())
+        {
+            std::string mac = it->second->macAddress();
+            if (mac != "00:00:00:00:00:00")
+            {
+                std::transform(mac.begin(), mac.end(), mac.begin(),
+                               [](unsigned char c) { return std::tolower(c); });
+                return mac;
+            }
+        }
+    }
+    catch (const std::exception&)
     {
         return {"00:00:00:00:00:00"};
     }
 
-    if (fgets(data, sizeof(data), fp) == NULL)
-    {
-        pclose(fp);
-        return {"00:00:00:00:00:00"};
-    }
-    pclose(fp);
-
-    std::stringstream ss(data);
-
-    std::string ip, dev, devname, addrtype, mac, state;
-
-    ss >> ip >> dev >> devname >> addrtype >> mac >> state;
-
-    std::regex mac_regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$");
-
-    if (std::regex_match(mac, mac_regex) == false)
+    auto [resolvedMac, _] =
+        getDwMacAddrByIP(EthernetInterfaceIntf::backupGateway());
+    if (!resolvedMac.has_value())
     {
         return {"00:00:00:00:00:00"};
     }
 
+    std::string mac = *resolvedMac;
+    std::transform(mac.begin(), mac.end(), mac.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
     return mac;
 }
 
