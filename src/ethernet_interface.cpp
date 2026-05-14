@@ -1349,6 +1349,15 @@ size_t EthernetInterface::mtu(size_t value)
 bool EthernetInterface::nicEnabled(bool value)
 {
 #if ENABLE_BOND_SUPPORT
+    if (interfaceName() == bondIfcName)
+    {
+        lg2::error("Unable to enable/disable bond interface {IFACE}", "IFACE",
+                   interfaceName());
+        elog<InvalidArgument>(
+            Argument::ARGUMENT_NAME("IFACE"),
+            Argument::ARGUMENT_VALUE(interfaceName().c_str()));
+    }
+
     if (interfaceName() != bondIfcName &&
         manager.get().interfaces.find(bondIfcName) !=
             manager.get().interfaces.end())
@@ -1652,7 +1661,8 @@ ObjectPath EthernetInterface::createBond(std::string activeSlave,
                 "Bond cannot be enabled as VLAN is enabled"));
         }
 
-        if (!intf->EthernetInterfaceIntf::nicEnabled())
+        if (intf->interfaceName() == activeSlave &&
+            !intf->EthernetInterfaceIntf::nicEnabled())
         {
             log<level::ERR>(
                 fmt::format(
