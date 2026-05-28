@@ -2148,7 +2148,7 @@ void EthernetInterface::writeConfigurationFile()
     auto it = manager.get().interfaces.find(bondIfcName);
 
     if ((it != manager.get().interfaces.end()) &&
-        (interfaceName().compare(bondIfcName) != 0) &&
+        (interfaceName().find(bondIfcName) == std::string::npos) &&
         (interfaceName().compare("hostusb0") != 0))
     {
         std::error_code ec{};
