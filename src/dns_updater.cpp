@@ -397,15 +397,10 @@ int16_t Configuration::toDeregister()
             lg2::info("Interface not found: {INAME}\n", "INAME", iName);
         }
 
-        for (int i = 1; true; i++)
+        std::filesystem::path delFile(
+            fmt::format("{}-del-{}", NSUPDATE_TMP_FILE, iName).c_str());
+        if (std::filesystem::exists(delFile))
         {
-            std::filesystem::path delFile(
-                fmt::format("{}-del-{}-{}", NSUPDATE_TMP_FILE, iName, i)
-                    .c_str());
-            if (!std::filesystem::exists(delFile))
-            {
-                break;
-            }
             std::error_code ec;
             std::filesystem::remove(delFile, ec);
         }
@@ -448,24 +443,19 @@ int16_t Configuration::toDeregister()
             }
         }
 
-        auto i = 1;
+        ofs.open(fmt::format("{}-del-{}", NSUPDATE_TMP_FILE, iName).c_str());
+        if (!ofs.is_open())
+        {
+            lg2::error("Cannot create {NSUPDATE_TMP_FILE}-del-{NAME}\n",
+                       "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME", iName);
+            return -1;
+        }
         for (auto& domainName : domainNameList)
         {
             for (auto& dns : dnsServers)
             {
                 for (auto& ip : IPs)
                 {
-                    ofs.open(
-                        fmt::format("{}-del-{}-{}", NSUPDATE_TMP_FILE, iName, i)
-                            .c_str());
-                    if (!ofs.is_open())
-                    {
-                        lg2::error(
-                            "Cannot create {NSUPDATE_TMP_FILE}-del-{NAME}-{INDEX}\n",
-                            "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME",
-                            iName, "INDEX", i);
-                        return -1;
-                    }
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
                     lg2::info(cmd.c_str());
@@ -483,12 +473,11 @@ int16_t Configuration::toDeregister()
                     lg2::info(cmd.c_str());
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
-                    ofs.close();
-                    i++;
                 }
             }
         }
 
+        ofs.close();
         dnsWorkq.push([iName]() {
             std::this_thread::sleep_for(std::chrono::seconds(5));
             execute("/usr/bin/nsupdate.sh", "nsupdate.sh", "deregister",
@@ -528,15 +517,10 @@ int16_t Configuration::toRegister()
             continue;
         } //
 
-        for (int i = 1; true; i++)
+        std::filesystem::path delFile(
+            fmt::format("{}-add-{}", NSUPDATE_TMP_FILE, iName).c_str());
+        if (std::filesystem::exists(delFile))
         {
-            std::filesystem::path delFile(
-                fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE, iName, i)
-                    .c_str());
-            if (!std::filesystem::exists(delFile))
-            {
-                break;
-            }
             std::error_code ec;
             std::filesystem::remove(delFile, ec);
         }
@@ -546,7 +530,6 @@ int16_t Configuration::toRegister()
             continue;
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(3));
         std::vector<std::string> domainNames = getDomainName(iName);
         if (domainNames.empty())
         {
@@ -554,10 +537,16 @@ int16_t Configuration::toRegister()
             continue;
         }
 
-        auto i = 1;
+        ofs.open(fmt::format("{}-add-{}", NSUPDATE_TMP_FILE, iName).c_str());
+        if (!ofs.is_open())
+        {
+            lg2::error("Cannot create {NSUPDATE_TMP_FILE}-add-{NAME}\n",
+                       "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME", iName);
+            return -1;
+        }
+
         for (auto& domainName : domainNames)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
             std::vector<std::string> dnsServers = getDNSServer(iName);
             if (dnsServers.empty())
             {
@@ -581,17 +570,6 @@ int16_t Configuration::toRegister()
                             continue;
                     }
 
-                    ofs.open(
-                        fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE, iName, i)
-                            .c_str());
-                    if (!ofs.is_open())
-                    {
-                        lg2::error(
-                            "Cannot create {NSUPDATE_TMP_FILE}-add-{NAME}-{INDEX}\n",
-                            "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME",
-                            iName, "INDEX", i);
-                        return -1;
-                    }
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
                     lg2::info(cmd.c_str());
@@ -611,14 +589,13 @@ int16_t Configuration::toRegister()
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
                     lg2::info(cmd.c_str());
-                    ofs.close();
-                    i++;
                 }
             }
         }
 
+        ofs.close();
         dnsWorkq.push([iName]() {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             execute("/usr/bin/nsupdate.sh", "nsupdate.sh", "register",
                     iName.c_str());
         });
@@ -698,6 +675,8 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                                           HOSTNAMED_INTF, "SetStaticHostname");
         method.append(hostname, /*interactive=*/false);
         bus.call(method);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        toRegister();
         for (auto it = manager.get().interfaces.begin();
              it != manager.get().interfaces.end(); it++)
         {
@@ -705,10 +684,8 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                 it->second->interfaceName().find_first_of("eth") !=
                     std::string::npos)
                 manager.get().reconfigLink(it->second->getIfIdx());
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        toRegister();
     }
 
     if (ddnsIface::useMDNS())
