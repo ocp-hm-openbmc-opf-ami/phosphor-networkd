@@ -37,6 +37,13 @@ static void parseBondInfo(InterfaceInfo& info, std::string_view msg)
     {
         throw std::runtime_error("Missing Bond data");
     }
+
+    // Initialize bondInfo early to ensure it's engaged before setting properties
+    if (!info.bondInfo.has_value())
+    {
+        info.bondInfo.emplace(BondInfo{"", 0, 0});
+    }
+
     while (!msg.empty())
     {
         auto [hdr, data] = netlink::extractRtAttr(msg);
