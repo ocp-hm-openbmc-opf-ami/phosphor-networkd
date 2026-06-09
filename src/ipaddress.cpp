@@ -132,13 +132,18 @@ IP::AddressOrigin IPAddress::origin(IP::AddressOrigin /*origin*/)
     elog<NotAllowed>(Reason("Property update is not allowed"));
 }
 
-void IPAddress::deleteAddrInterface()
+void IPAddress::deleteAddrInterface(std::unique_ptr<IPAddress>* keepAlive)
 {
-    if (origin() != IP::AddressOrigin::Static)
+    const auto addr = address();
+    const auto proto = type();
+    const auto addrOrigin = origin();
+    const auto pfx = prefixLength();
+
+    if (addrOrigin != IP::AddressOrigin::Static)
     {
         lg2::error("Tried to delete a non-static address {NET_IP} prefix "
                    "{NET_PFX} interface {NET_INTF}",
-                   "NET_IP", address(), "NET_PFX", prefixLength(), "NET_INTF",
+                   "NET_IP", addr, "NET_PFX", pfx, "NET_INTF", 
                    parent.get().interfaceName());
     }
 
@@ -150,15 +155,20 @@ void IPAddress::deleteAddrInterface()
         {
             ptr = std::move(it->second);
             addrs.erase(it);
-            parent.get().delIpIdx(this->address(), this->type());
+            parent.get().delIpIdx(addr, proto);
             break;
         }
+    }
+    if (keepAlive != nullptr)
+    {
+        *keepAlive = std::move(ptr);
     }
 }
 
 void IPAddress::delete_()
 {
-    deleteAddrInterface();
+    std::unique_ptr<IPAddress> keepAlive;
+    deleteAddrInterface(&keepAlive);
     parent.get().writeConfigurationFile();
     parent.get().manager.get().reloadConfigs();
 }

@@ -1010,7 +1010,7 @@ void EthernetInterface::delIpIdx(std::string address, IP::Protocol protocolType)
 {
     if (protocolType == IP::Protocol::IPv4)
     {
-        for (int i = 0; i < IPV4_MAX_NUM; i++)
+        for (size_t i = 0; i < ipv4IndexUsedList.size(); i++)
         {
             if (ipv4IndexUsedList.at(i).value_or("0.0.0.0") == address)
             {
@@ -1021,7 +1021,7 @@ void EthernetInterface::delIpIdx(std::string address, IP::Protocol protocolType)
     } // if
     else if (protocolType == IP::Protocol::IPv6)
     {
-        for (int i = 0; i < IPV6_MAX_NUM; i++)
+        for (size_t i = 0; i < ipv6IndexUsedList.size(); i++)
         {
             if (ipv6IndexUsedList.at(i).value_or("::") == address)
             {
@@ -1064,6 +1064,7 @@ ObjectPath EthernetInterface::neighbor(
     auto it = staticNeighbors.find(*addr);
     if (it == staticNeighbors.end())
     {
+	const bool isV4Neighbor = std::holds_alternative<stdplus::In4Addr>(*addr);
         it = std::get<0>(staticNeighbors.emplace(
             *addr, std::make_unique<Neighbor>(
                        bus, std::string_view(objPath), *this, *addr, *lladdr,
@@ -1071,10 +1072,8 @@ ObjectPath EthernetInterface::neighbor(
 #ifdef AMI_IP_ADVANCED_ROUTING_SUPPORT
         if (manager.get().initCompleted)
         {
-            manager.get().addReloadPostHook([&]() {
-                stdplus::In4Addr* inaddr =
-                    std::get_if<stdplus::In4Addr>(&(addr.value()));
-                if (inaddr != nullptr)
+                manager.get().addReloadPostHook([this, isV4Neighbor]() {
+                if (isV4Neighbor) 
                 {
                     execute("/usr/bin/ipv4-advanced-route.sh",
                             "ipv4-advanced-route.sh", interfaceName().c_str(),
@@ -1171,16 +1170,25 @@ bool EthernetInterface::dhcp4(bool value)
                     EthernetInterfaceIntf::staticNameServers(currentDNS);
                 }
             }
-            manager.get().addReloadPostHook([&]() {
-                for (auto& addr : addrs)
+	    ipv4IndexUsedList.clear();
+            ipv4IndexUsedList.assign(IPV4_MAX_NUM + 1, std::nullopt);
+            for (auto& [subnet, addr] : addrs)
+            {
+                if (addr->type() != IP::Protocol::IPv4)
                 {
-                    if (addr.second->type() == IP::Protocol::IPv4)
-                    {
-                        addr.second->deleteAddrInterface();
-                        break;
-                    }
+		    continue;
                 }
-            });
+
+		if (addr->origin() == IP::AddressOrigin::DHCP)
+                {
+                    addr->IPIfaces::origin(IP::AddressOrigin::Static);
+                }
+
+                if (addr->origin() == IP::AddressOrigin::Static)
+                {
+                    updateIpIndex(subnet, true);
+                }
+            }
         }
         EthernetInterfaceIntf::dhcp4(value);
         writeConfigurationFile();
@@ -2383,8 +2391,6 @@ void EthernetInterface::writeConfigurationFile()
         {
             auto& dhcpv6 = config.map["DHCPv6"].emplace_back();
             dhcpv6["DUIDType"].emplace_back("link-layer");
-        }
-        {
             dhcpv6TimingParamWriteConfFile(config);
         }
         {
