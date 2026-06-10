@@ -84,6 +84,7 @@ constexpr auto SYSTEMCONF_PROP_INTERFACE =
 constexpr auto SYSTEMCONF_SERVICE_PATH = "/xyz/openbmc_project/network/config";
 
 constexpr auto BMC_STATE_PROP_INTERFACE = "xyz.openbmc_project.State.BMC";
+constexpr auto BMC_STATE_SERVICE = "xyz.openbmc_project.State.BMC";
 constexpr auto BMC_STATE_SERVICE_PATH = "/xyz/openbmc_project/state/bmc0";
 
 constexpr char HOSTNAMED_SVC[] = "org.freedesktop.hostname1";
@@ -135,6 +136,7 @@ Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
             ddnsIface::hostConf(std::make_tuple(
                 true, manager.get().getSystemConf().hostName()));
         }
+        ddnsIface::sendNsupdateEnabled(true);
         // {
         //     if (getDHCPProp(conf, "UseDomains") && dnsEnabled()) {
         //          ddnsIface::domainConf(std::make_tuple(true,1, ""));
@@ -159,7 +161,6 @@ Configuration::Configuration(sdbusplus::bus_t& bus, stdplus::const_zstring path,
     emit_object_added();
 
     ddnsIface::setInProgress(false);
-    dnsLock = std::unique_lock(dnsMutex);
     dnsWorker = std::thread(&Configuration::dnsWorkerFunc, this);
 }
 
@@ -356,18 +357,35 @@ void Configuration::dnsWorkerFunc()
 {
     while (true)
     {
-        dnsCondVar.wait(dnsLock);
-        ddnsIface::setInProgress(true);
-        while (!dnsWorkq.empty())
+        std::queue<std::function<void()>> workq;
         {
-            dnsWorkq.front()();
-            dnsWorkq.pop();
+            std::unique_lock<std::mutex> lock(dnsMutex);
+            dnsCondVar.wait(lock, [this]() { return !dnsWorkq.empty(); });
+            std::swap(workq, dnsWorkq);
+        }  
+        ddnsIface::setInProgress(true);
+        while (!workq.empty()) 
+        {
+            workq.front()();
+            workq.pop(); 
         }
 
         ddnsIface::setInProgress(false);
         fs::copy_file(DNS_CONF, DNS_CONF_BAK,
                       fs::copy_options::overwrite_existing);
     }
+}
+
+void Configuration::sendHostDisabled(const std::string& iface)
+{
+    std::lock_guard<std::mutex> lock(dnsMutex);
+    sendHostNameDisabledIfaces.insert(iface);
+}
+
+void Configuration::sendHostEnabled(const std::string& iface)
+{
+    std::lock_guard<std::mutex> lock(dnsMutex);
+    sendHostNameEnabledIfaces.insert(iface);
 }
 
 int16_t Configuration::toDeregister()
@@ -380,7 +398,14 @@ int16_t Configuration::toDeregister()
         return 0;
     }
 
-    if (!sendNsupdateEnabled() && !NsupdateEnabledChanged)
+    bool hasHostNameDisabledIface = false;
+    {
+        std::lock_guard<std::mutex> lock(dnsMutex);
+        hasHostNameDisabledIface = !sendHostNameDisabledIfaces.empty();
+    }
+
+    if (!sendNsupdateEnabled() && !NsupdateEnabledChanged &&
+        !hasHostNameDisabledIface)
     {
         lg2::warning("sendNsupdateEnabled is not enabled...\n");
         return 0;
@@ -391,6 +416,9 @@ int16_t Configuration::toDeregister()
         lg2::info("Backup config incomplete, skipping deregistration\n");
         return 0;
     }
+
+    bool globalNsupdateDisabled = !sendNsupdateEnabled() && !NsupdateEnabledChanged;
+
     auto [setting, hostname] = preHost;
     for (auto it = preIfaceConf.begin(); it != preIfaceConf.end(); it++)
     {
@@ -404,10 +432,15 @@ int16_t Configuration::toDeregister()
             lg2::info("Interface not found: {INAME}\n", "INAME", iName);
         }
 
-        std::filesystem::path delFile(
-            fmt::format("{}-del-{}", NSUPDATE_TMP_FILE, iName).c_str());
-        if (std::filesystem::exists(delFile))
+        for (int i = 1; true; i++)
         {
+            std::filesystem::path delFile(
+                fmt::format("{}-del-{}-{}", NSUPDATE_TMP_FILE, iName, i)
+                    .c_str());
+            if (!std::filesystem::exists(delFile))
+            {
+                break;
+            }
             std::error_code ec;
             std::filesystem::remove(delFile, ec);
         }
@@ -415,6 +448,35 @@ int16_t Configuration::toDeregister()
         if (method == Method::Deregister || doNsupdate == false)
         {
             continue;
+        }
+
+        bool hostNameDisabled = false;
+
+        {
+            std::lock_guard<std::mutex> lock(dnsMutex);
+            hostNameDisabled = sendHostNameDisabledIfaces.count(iName) > 0;
+            if (hostNameDisabled)
+            {
+                sendHostNameDisabledIfaces.erase(iName);
+            }
+        }
+
+        if (globalNsupdateDisabled && !hostNameDisabled)
+        {
+            continue;
+        }
+
+        if (!globalNsupdateDisabled && !hostNameDisabled &&
+            iface != manager.get().interfaces.end())
+        {
+            bool dhcp4SendHost = iface->second->dhcp4Conf.has_value() &&
+                                  iface->second->dhcp4Conf->sendHostNameEnabled();
+            bool dhcp6SendHost = iface->second->dhcp6Conf.has_value() &&
+                                  iface->second->dhcp6Conf->sendHostNameEnabled();
+            if (!dhcp4SendHost && !dhcp6SendHost)
+            {
+                continue;
+            }
         }
 
         std::vector<std::string> dnsServers;
@@ -450,19 +512,24 @@ int16_t Configuration::toDeregister()
             }
         }
 
-        ofs.open(fmt::format("{}-del-{}", NSUPDATE_TMP_FILE, iName).c_str());
-        if (!ofs.is_open())
-        {
-            lg2::error("Cannot create {NSUPDATE_TMP_FILE}-del-{NAME}\n",
-                       "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME", iName);
-            return -1;
-        }
+        auto i = 1;
         for (auto& domainName : domainNameList)
         {
             for (auto& dns : dnsServers)
             {
                 for (auto& ip : IPs)
                 {
+                    ofs.open(
+                        fmt::format("{}-del-{}-{}", NSUPDATE_TMP_FILE, iName, i)
+                            .c_str());
+                    if (!ofs.is_open())
+                    {
+                        lg2::error(
+                            "Cannot create {NSUPDATE_TMP_FILE}-del-{NAME}-{INDEX}\n",
+                            "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME",
+                            iName, "INDEX", i);
+                        return -1;
+                    }
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
                     lg2::info(cmd.c_str());
@@ -470,8 +537,8 @@ int16_t Configuration::toDeregister()
                         ip.find(":") == std::string::npos ? false : true;
                     std::string revIP =
                         ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
-                    cmd = fmt::format("update delete {}.{} {}\n", hostname,
-                                      domainName, ipv6 ? "AAAA" : "A");
+		    cmd = fmt::format("update delete {}.{} {} {} {}\n", hostname,
+                                          domainName, TTL, ipv6 ? "AAAA" : "A", ip);
                     lg2::info(cmd.c_str());
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
@@ -480,16 +547,36 @@ int16_t Configuration::toDeregister()
                     lg2::info(cmd.c_str());
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
+                    ofs.close();
+                    i++;
                 }
             }
         }
 
-        ofs.close();
-        dnsWorkq.push([iName]() {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-            execute("/usr/bin/nsupdate.sh", "nsupdate.sh", "deregister",
-                    iName.c_str());
-        });
+        {
+            std::lock_guard<std::mutex> lock(dnsMutex);
+            dnsWorkq.push([iName, tsig]() {
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+                if (tsig)
+                {
+                    execute("/usr/bin/nsupdate.sh", "nsupdate.sh", "deregister",
+                            iName.c_str());
+                }
+                else
+                {
+                    for (int idx = 1; true; idx++)
+                    {
+                        auto tmpFile = fmt::format("{}-del-{}-{}",
+                                                   NSUPDATE_TMP_FILE, iName, idx);
+                        if (!std::filesystem::exists(tmpFile))
+                            break;
+                        lg2::info("Running nsupdate for {FILE}", "FILE", tmpFile);
+                        execute("/usr/bin/nsupdate", "nsupdate", tmpFile.c_str());
+                    }
+                }
+                execute("/usr/bin/resolvectl", "resolvectl", "flush-caches");
+            });
+        }
     }
 
     dnsCondVar.notify_one();
@@ -502,11 +589,13 @@ int16_t Configuration::toRegister()
     int ret = 0;
     std::string info;
 
-    if (!sendNsupdateEnabled())
+    if (!sendNsupdateEnabled() && !NsupdateEnabledChanged)
     {
-        lg2::warning("sendNsupdateEnabled is not enabled...\n");
-        return 0;
+        lg2::info(
+            "sendNsupdateEnabled is disabled");
     }
+
+    bool globalNsupdateDisabled = !sendNsupdateEnabled() && !NsupdateEnabledChanged;
 
     auto [setting, hostname] = ddnsIface::hostConf();
     std::vector<std::tuple<std::string, bool, bool, ddnsIface::Method>>
@@ -524,10 +613,15 @@ int16_t Configuration::toRegister()
             continue;
         } //
 
-        std::filesystem::path delFile(
-            fmt::format("{}-add-{}", NSUPDATE_TMP_FILE, iName).c_str());
-        if (std::filesystem::exists(delFile))
+        for (int i = 1; true; i++)
         {
+            std::filesystem::path delFile(
+                fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE, iName, i)
+                    .c_str());
+            if (!std::filesystem::exists(delFile))
+            {
+                break;
+            }
             std::error_code ec;
             std::filesystem::remove(delFile, ec);
         }
@@ -537,24 +631,66 @@ int16_t Configuration::toRegister()
             continue;
         }
 
+        bool hostNameJustEnabled = false;
+
+        {
+            std::lock_guard<std::mutex> lock(dnsMutex);
+            hostNameJustEnabled = sendHostNameEnabledIfaces.count(iName) > 0;
+            if (hostNameJustEnabled)
+            {
+                sendHostNameEnabledIfaces.erase(iName);
+            }
+        }
+
+        if (!hostNameJustEnabled && globalNsupdateDisabled)
+        {
+            bool dhcp4SendHost = iface->second->dhcp4Conf.has_value() &&
+                                  iface->second->dhcp4Conf->sendHostNameEnabled();
+            bool dhcp6SendHost = iface->second->dhcp6Conf.has_value() &&
+                                  iface->second->dhcp6Conf->sendHostNameEnabled();
+            if (!dhcp4SendHost && !dhcp6SendHost)
+            {
+                continue;
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(3));
         std::vector<std::string> domainNames = getDomainName(iName);
+        if (domainNames.empty() && hostNameJustEnabled)
+        {
+            for (auto& vv : preDomain)
+            {
+                auto [domainIface, names] = vv;
+                if (domainIface == iName)
+                {
+                    domainNames = names;
+                    break;
+                }
+            }
+        }
         if (domainNames.empty())
         {
             lg2::info("Domain Name isn't set.\n");
             continue;
         }
 
-        ofs.open(fmt::format("{}-add-{}", NSUPDATE_TMP_FILE, iName).c_str());
-        if (!ofs.is_open())
-        {
-            lg2::error("Cannot create {NSUPDATE_TMP_FILE}-add-{NAME}\n",
-                       "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME", iName);
-            return -1;
-        }
-
+        auto i = 1;
         for (auto& domainName : domainNames)
         {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
             std::vector<std::string> dnsServers = getDNSServer(iName);
+            if (dnsServers.empty() && hostNameJustEnabled)
+            {
+                for (auto& vv : preDns)
+                {
+                    auto [dnsIface, servers] = vv;
+                    if (dnsIface == iName)
+                    {
+                        dnsServers = servers;
+                        break;
+                    }
+                }
+            }
             if (dnsServers.empty())
             {
                 lg2::info("DNS Server isn't set.\n");
@@ -577,6 +713,20 @@ int16_t Configuration::toRegister()
                             continue;
                     }
 
+                    ofs.open(
+                        fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE, iName, i)
+                            .c_str());
+                    if (!ofs.is_open())
+                    {
+                        lg2::error(
+                            "Cannot create {NSUPDATE_TMP_FILE}-add-{NAME}-{INDEX}\n",
+                            "NSUPDATE_TMP_FILE", NSUPDATE_TMP_FILE, "NAME",
+                            iName, "INDEX", i);
+                        return -1;
+                    }
+		    lg2::info("Created add file: {FILE}", "FILE",
+                              fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE,
+                                          iName, i));
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
                     lg2::info(cmd.c_str());
@@ -596,16 +746,47 @@ int16_t Configuration::toRegister()
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
                     lg2::info(cmd.c_str());
+                    ofs.close();
+                    i++;
                 }
             }
         }
 
-        ofs.close();
-        dnsWorkq.push([iName]() {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            execute("/usr/bin/nsupdate.sh", "nsupdate.sh", "register",
-                    iName.c_str());
-        });
+        bool forceRegister = NsupdateEnabledChanged || hostNameJustEnabled ||
+                             globalNsupdateDisabled;
+        {
+            std::lock_guard<std::mutex> lock(dnsMutex);
+            dnsWorkq.push([iName, tsig, forceRegister]() {
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+                if (tsig)
+                {
+                    if (forceRegister)
+                    {
+                        execute("/usr/bin/nsupdate.sh", "nsupdate.sh",
+                                "register", iName.c_str(), "force");
+                    }
+                    else
+                    {
+                        execute("/usr/bin/nsupdate.sh", "nsupdate.sh",
+                                "register", iName.c_str());
+                    }
+                }
+                else
+                {
+                    for (int idx = 1; true; idx++)
+                    {
+                        auto tmpFile = fmt::format("{}-add-{}-{}",
+                                                   NSUPDATE_TMP_FILE, iName, idx);
+                        if (!std::filesystem::exists(tmpFile))
+                            break;
+                        lg2::info("Running nsupdate for {FILE}", "FILE", tmpFile);
+                        execute("/usr/bin/nsupdate", "nsupdate", tmpFile.c_str());
+                    }
+                }
+                execute("/usr/bin/resolvectl", "resolvectl", "flush-caches");
+            });
+        }
+
     }
 
     writeConfigurationFile();
@@ -675,6 +856,7 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
 
     if (different)
     {
+	NsupdateEnabledChanged = true;
         toDeregister();
         manager.get().getSystemConf().hostName(hostname, true);
         hostConf(std::make_tuple(hostSetting, hostname));
@@ -682,8 +864,6 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                                           HOSTNAMED_INTF, "SetStaticHostname");
         method.append(hostname, /*interactive=*/false);
         bus.call(method);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        toRegister();
         for (auto it = manager.get().interfaces.begin();
              it != manager.get().interfaces.end(); it++)
         {
@@ -691,8 +871,11 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                 it->second->interfaceName().find_first_of("eth") !=
                     std::string::npos)
                 manager.get().reconfigLink(it->second->getIfIdx());
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        toRegister();
+	NsupdateEnabledChanged = false;
     }
 
     if (ddnsIface::useMDNS())
@@ -1463,9 +1646,7 @@ bool Configuration::sendNsupdateEnabled(bool value)
     ddnsIface::sendNsupdateEnabled(value);
     if (!value)
     {
-        NsupdateEnabledChanged = true;
-        toDeregister();
-        NsupdateEnabledChanged = false;
+	lg2::info("SendNsupdate disabled; preserving existing DNS records");
     }
     writeConfigurationFile();
     return value;

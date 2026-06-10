@@ -491,10 +491,15 @@ void EthernetInterface::addAddr(const AddressInfo& info)
     auto it = addrs.find(info.ifaddr);
     if (it == addrs.end())
     {
+        std::string addrStr = stdplus::toStr(info.ifaddr.getAddr());
+        bool isDhcpManagedGlobal = dhcpIsEnabled(info.ifaddr.getAddr()) &&
+                                   (info.scope == RT_SCOPE_UNIVERSE);
+        bool isIPv6Addr = addrStr.find(":") != std::string::npos;
+
         int idx = 0;
         if (origin == IP::AddressOrigin::Static)
         {
-            auto tmpAddr = stdplus::toStr(info.ifaddr.getAddr());
+            auto tmpAddr = addrStr;
             if (tmpAddr.find(":") != std::string::npos)
             {
                 idx = getProperIpIdx<IP::Protocol::IPv6>(ipv6IndexUsedList,
@@ -509,6 +514,27 @@ void EthernetInterface::addAddr(const AddressInfo& info)
         addrs.emplace(info.ifaddr, std::make_unique<IPAddress>(
                                        bus, std::string_view(objPath), *this,
                                        info.ifaddr, origin, idx));
+
+#if NSUPDATE_SUPPORT
+        if (isDhcpManagedGlobal && manager.get().initCompleted)
+        {
+            bool canSendHost = false;
+            if (isIPv6Addr && dhcp6Conf.has_value())
+            {
+                canSendHost = dhcp6Conf->sendHostNameEnabled();
+            }
+            else if (!isIPv6Addr && dhcp4Conf.has_value())
+            {
+                canSendHost = dhcp4Conf->sendHostNameEnabled();
+            }
+
+            if (canSendHost)
+            {
+                manager.get().getDNSConf().addInterfaceConf(interfaceName());
+                manager.get().getDNSConf().toRegister();
+            }
+        }
+#endif
     }
     else
     {
@@ -1349,15 +1375,6 @@ size_t EthernetInterface::mtu(size_t value)
 bool EthernetInterface::nicEnabled(bool value)
 {
 #if ENABLE_BOND_SUPPORT
-    if (interfaceName() == bondIfcName)
-    {
-        lg2::error("Unable to enable/disable bond interface {IFACE}", "IFACE",
-                   interfaceName());
-        elog<InvalidArgument>(
-            Argument::ARGUMENT_NAME("IFACE"),
-            Argument::ARGUMENT_VALUE(interfaceName().c_str()));
-    }
-
     if (interfaceName() != bondIfcName &&
         manager.get().interfaces.find(bondIfcName) !=
             manager.get().interfaces.end())
@@ -1661,8 +1678,7 @@ ObjectPath EthernetInterface::createBond(std::string activeSlave,
                 "Bond cannot be enabled as VLAN is enabled"));
         }
 
-        if (intf->interfaceName() == activeSlave &&
-            !intf->EthernetInterfaceIntf::nicEnabled())
+        if (!intf->EthernetInterfaceIntf::nicEnabled())
         {
             log<level::ERR>(
                 fmt::format(

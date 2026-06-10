@@ -103,8 +103,20 @@ bool Configuration::sendHostNameEnabled(bool value)
     parent.get().reloadConfigs();
 
 #if NSUPDATE_SUPPORT
-    // Trigger DNS registration after sendHostname configuration changes
-    parent.get().manager.get().getDNSConf().doNsupdate();
+    if (!value)
+    {
+        const auto& ifaceName = parent.get().interfaceName();
+        auto& dnsConf = parent.get().manager.get().getDNSConf();
+        dnsConf.sendHostDisabled(ifaceName);
+        dnsConf.toDeregister();
+    }
+    else
+    {
+        const auto& ifaceName = parent.get().interfaceName();
+        auto& dnsConf = parent.get().manager.get().getDNSConf();
+        dnsConf.sendHostEnabled(ifaceName);
+        dnsConf.toRegister();
+    }
 #endif
     return name;
 }

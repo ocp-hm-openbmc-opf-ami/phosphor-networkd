@@ -15,6 +15,7 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <set>
 
 namespace phosphor
 {
@@ -207,6 +208,10 @@ class Configuration : Iface
 #endif
     void addInterfaceConf(std::string interface);
 
+    void sendHostDisabled(const std::string& iface);
+
+    void sendHostEnabled(const std::string& iface);
+
     std::queue<std::function<void()>> dnsWorkq;
     std::condition_variable dnsCondVar;
 
@@ -250,10 +255,12 @@ class Configuration : Iface
 
     DNS_PROGESS state;
     std::thread dnsWorker;
-    std::unique_lock<std::mutex> dnsLock;
     std::mutex dnsMutex;
     void dnsWorkerFunc();
     bool NsupdateEnabledChanged;
+    std::set<std::string> sendHostNameDisabledIfaces;
+    std::set<std::string> sendHostNameEnabledIfaces;
+    std::map<std::string, std::vector<std::string>> lastRegisteredIPs;
 }; // class Configuration
 
 } // namespace dns
