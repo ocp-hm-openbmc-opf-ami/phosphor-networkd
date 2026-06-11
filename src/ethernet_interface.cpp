@@ -3409,6 +3409,15 @@ int16_t EthernetInterface::setPHYConfiguration(bool autoNeg, Duplex duplex,
         return -1;
     }
 
+#if AMI_NCSI_SUPPORT
+    if (this->ncsiConfig.has_value())
+    {
+        log<level::ERR>(
+            "Not allow changing PHY configuration directly in NCSI interface.\n");
+        return -1;
+    }
+#endif
+
     if (!autoNeg && speed != 10 && speed != 100)
     {
         log<level::ERR>(
