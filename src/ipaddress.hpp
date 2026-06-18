@@ -8,7 +8,6 @@
 #include <xyz/openbmc_project/Network/IP/server.hpp>
 #include <xyz/openbmc_project/Object/Delete/server.hpp>
 
-#include <memory>
 #include <string_view>
 
 namespace phosphor
@@ -55,7 +54,7 @@ class IPAddress : public IPIfaces
 
     /** @brief Delete this d-bus object.
      */
-    void deleteAddrInterface(std::unique_ptr<IPAddress>* keepAlive = nullptr);
+    void deleteAddrInterface();
 
     /** @brief Delete this d-bus object and reload service.
      */

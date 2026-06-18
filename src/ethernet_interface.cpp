@@ -1010,7 +1010,7 @@ void EthernetInterface::delIpIdx(std::string address, IP::Protocol protocolType)
 {
     if (protocolType == IP::Protocol::IPv4)
     {
-        for (size_t i = 0; i < ipv4IndexUsedList.size(); i++)
+        for (size_t i = 0; i < IPV4_MAX_NUM; i++)
         {
             if (ipv4IndexUsedList.at(i).value_or("0.0.0.0") == address)
             {
@@ -1021,7 +1021,7 @@ void EthernetInterface::delIpIdx(std::string address, IP::Protocol protocolType)
     } // if
     else if (protocolType == IP::Protocol::IPv6)
     {
-        for (size_t i = 0; i < ipv6IndexUsedList.size(); i++)
+        for (size_t i = 0; i < IPV6_MAX_NUM; i++)
         {
             if (ipv6IndexUsedList.at(i).value_or("::") == address)
             {
@@ -1170,25 +1170,17 @@ bool EthernetInterface::dhcp4(bool value)
                     EthernetInterfaceIntf::staticNameServers(currentDNS);
                 }
             }
-	    ipv4IndexUsedList.clear();
-            ipv4IndexUsedList.assign(IPV4_MAX_NUM + 1, std::nullopt);
-            for (auto& [subnet, addr] : addrs)
-            {
-                if (addr->type() != IP::Protocol::IPv4)
-                {
-		    continue;
-                }
 
-		if (addr->origin() == IP::AddressOrigin::DHCP)
+            manager.get().addReloadPostHook([&]() {
+                for (auto& addr : addrs)
                 {
-                    addr->IPIfaces::origin(IP::AddressOrigin::Static);
+                    if (addr.second->type() == IP::Protocol::IPv4)
+                    {
+                        addr.second->deleteAddrInterface();
+                        break;
+                    }
                 }
-
-                if (addr->origin() == IP::AddressOrigin::Static)
-                {
-                    updateIpIndex(subnet, true);
-                }
-            }
+            });
         }
         EthernetInterfaceIntf::dhcp4(value);
         writeConfigurationFile();
