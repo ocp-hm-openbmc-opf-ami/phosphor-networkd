@@ -1213,6 +1213,10 @@ bool EthernetInterface::dhcp6(bool value)
             ipv6IndexUsedList.assign(IPV6_MAX_NUM + 1, std::nullopt);
             EthernetInterfaceIntf::ipv6AcceptRA(true);
         } // if
+        else
+        {
+            EthernetInterfaceIntf::ipv6AcceptRA(false);
+        }
 
         manager.get().addReloadPostHook([&]() {
             auto size = addrs.size();
