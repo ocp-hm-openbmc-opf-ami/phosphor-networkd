@@ -132,7 +132,7 @@ IP::AddressOrigin IPAddress::origin(IP::AddressOrigin /*origin*/)
     elog<NotAllowed>(Reason("Property update is not allowed"));
 }
 
-void IPAddress::deleteAddrInterface()
+void IPAddress::deleteAddrInterface(std::unique_ptr<IPAddress>* keepAlive)
 {
     if (origin() != IP::AddressOrigin::Static)
     {
@@ -148,17 +148,23 @@ void IPAddress::deleteAddrInterface()
     {
         if (it->second.get() == this)
         {
+            parent.get().delIpIdx(this->address(), this->type());
             ptr = std::move(it->second);
             addrs.erase(it);
-            parent.get().delIpIdx(this->address(), this->type());
             break;
         }
+    }
+
+    if (keepAlive != nullptr)
+    {
+        *keepAlive = std::move(ptr);
     }
 }
 
 void IPAddress::delete_()
 {
-    deleteAddrInterface();
+    std::unique_ptr<IPAddress> keepAlive;
+    deleteAddrInterface(&keepAlive);
     parent.get().writeConfigurationFile();
     parent.get().manager.get().reloadConfigs();
 }
