@@ -532,19 +532,16 @@ int16_t Configuration::toDeregister()
                     }
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
-                    lg2::info(cmd.c_str());
                     bool ipv6 =
                         ip.find(":") == std::string::npos ? false : true;
                     std::string revIP =
                         ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
-		    cmd = fmt::format("update delete {}.{} {} {} {}\n", hostname,
+                    cmd = fmt::format("update delete {}.{} {} {} {}\n", hostname,
                                           domainName, TTL, ipv6 ? "AAAA" : "A", ip);
-                    lg2::info(cmd.c_str());
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
                     cmd = fmt::format("update delete {} {} PTR {}.{}\n", revIP,
                                       TTL, hostname, domainName);
-                    lg2::info(cmd.c_str());
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
                     ofs.close();
@@ -724,28 +721,21 @@ int16_t Configuration::toRegister()
                             iName, "INDEX", i);
                         return -1;
                     }
-		    lg2::info("Created add file: {FILE}", "FILE",
-                              fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE,
-                                          iName, i));
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
-                    lg2::info(cmd.c_str());
                     cmd = fmt::format("update add {}.{} {} {} {}\n", hostname,
                                       domainName, TTL, ipv6 ? "AAAA" : "A", ip);
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
-                    lg2::info(cmd.c_str());
                     std::string revIP =
                         ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
                     cmd = fmt::format("update delete {} PTR\n", revIP);
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
-                    lg2::info(cmd.c_str());
                     cmd = fmt::format("update add {} {} PTR {}.{}\n", revIP,
                                       TTL, hostname, domainName);
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
-                    lg2::info(cmd.c_str());
                     ofs.close();
                     i++;
                 }
