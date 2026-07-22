@@ -651,7 +651,6 @@ int16_t Configuration::toRegister()
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(3));
         std::vector<std::string> domainNames = getDomainName(iName);
         if (domainNames.empty() && hostNameJustEnabled)
         {
@@ -674,7 +673,6 @@ int16_t Configuration::toRegister()
         auto i = 1;
         for (auto& domainName : domainNames)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
             std::vector<std::string> dnsServers = getDNSServer(iName);
             if (dnsServers.empty() && hostNameJustEnabled)
             {
@@ -747,7 +745,6 @@ int16_t Configuration::toRegister()
         {
             std::lock_guard<std::mutex> lock(dnsMutex);
             dnsWorkq.push([iName, tsig, forceRegister]() {
-                std::this_thread::sleep_for(std::chrono::seconds(5));
                 if (tsig)
                 {
                     if (forceRegister)
@@ -854,6 +851,8 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                                           HOSTNAMED_INTF, "SetStaticHostname");
         method.append(hostname, /*interactive=*/false);
         bus.call(method);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        toRegister();
         for (auto it = manager.get().interfaces.begin();
              it != manager.get().interfaces.end(); it++)
         {
@@ -861,10 +860,8 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                 it->second->interfaceName().find_first_of("eth") !=
                     std::string::npos)
                 manager.get().reconfigLink(it->second->getIfIdx());
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        toRegister();
 	NsupdateEnabledChanged = false;
     }
 
