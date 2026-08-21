@@ -4,6 +4,8 @@
 
 #include <net/if_arp.h>
 
+#include <fstream>
+
 #include <sdbusplus/bus.hpp>
 #include <stdplus/gtest/tmp.hpp>
 
@@ -27,7 +29,14 @@ class TestNetworkManager : public stdplus::gtest::TestWithTmp
     TestNetworkManager() :
         bus(sdbusplus::bus::new_default()),
         manager(bus, "/xyz/openbmc_test/abc", CaseTmpDir())
-    {}
+    {
+        // Reset channel privilege JSON before each test case to prevent state
+        // leakage: getChannelPrivilege() writes to /var/channel_intf_data.json
+        // during EthernetInterface construction; stale entries from a previous
+        // test can leave the file in a state that causes type_error.305.
+        if (std::ofstream f("/var/channel_intf_data.json"); f.good())
+            f << "{}";
+    }
 
     void deleteVLAN(std::string_view ifname)
     {
@@ -89,6 +98,14 @@ TEST_F(TestNetworkManager, WithVLAN)
                 UnorderedElementsAre(Key("eth0"), Key("eth0.4094")));
     EXPECT_FALSE(std::filesystem::is_regular_file(netdev1));
     EXPECT_TRUE(std::filesystem::is_regular_file(netdev2));
+
+    // Delete the remaining VLAN to stop its monitor thread.
+    // EthernetInterface has no destructor to join vlanMonitorThread; leaving
+    // the thread running causes std::thread::~thread() on a joinable thread
+    // which calls terminate().
+    deleteVLAN("eth0.4094");
+    EXPECT_THAT(manager.interfaces, UnorderedElementsAre(Key("eth0")));
+    EXPECT_FALSE(std::filesystem::is_regular_file(netdev2));
 }
 
 } // namespace network

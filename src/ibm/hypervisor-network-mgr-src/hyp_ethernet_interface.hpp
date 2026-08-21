@@ -46,6 +46,30 @@ class HypEthInterface : public CreateIface
     HypEthInterface& operator=(HypEthInterface&&) = delete;
     virtual ~HypEthInterface() = default;
 
+#ifdef TEST_ENABLED
+    sdbusplus::message::object_path ipWithIndex(
+        sdbusplus::common::xyz::openbmc_project::network::IP::Protocol,
+        std::string, uint8_t, uint8_t, std::string) override
+    {
+        return sdbusplus::message::object_path{};
+    }
+
+    int16_t setPHYConfiguration(
+        bool,
+        sdbusplus::common::xyz::openbmc_project::network::EthernetInterface::Duplex,
+        uint32_t) override
+    {
+        return 0;
+    }
+
+    std::vector<std::tuple<std::vector<uint8_t>, std::vector<uint8_t>,
+                           uint8_t, std::vector<uint8_t>>>
+    getIPv6DynamicRouterInfo() override
+    {
+        return {};
+    }
+#endif // TEST_ENABLED
+
     /** @brief Constructor to put object onto bus at a dbus path.
      *  @param[in] bus - Bus to attach to.
      *  @param[in] path - Path to attach at.

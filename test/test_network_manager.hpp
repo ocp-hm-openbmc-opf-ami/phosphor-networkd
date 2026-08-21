@@ -39,6 +39,7 @@ struct TestManager : TestManagerData, Manager
     {}
 
     using Manager::handleAdminState;
+    using Manager::intfInfo;
 };
 
 } // namespace network

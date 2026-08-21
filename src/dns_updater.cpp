@@ -532,19 +532,16 @@ int16_t Configuration::toDeregister()
                     }
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
-                    lg2::info(cmd.c_str());
                     bool ipv6 =
                         ip.find(":") == std::string::npos ? false : true;
                     std::string revIP =
                         ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
-		    cmd = fmt::format("update delete {}.{} {} {} {}\n", hostname,
+                    cmd = fmt::format("update delete {}.{} {} {} {}\n", hostname,
                                           domainName, TTL, ipv6 ? "AAAA" : "A", ip);
-                    lg2::info(cmd.c_str());
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
                     cmd = fmt::format("update delete {} {} PTR {}.{}\n", revIP,
                                       TTL, hostname, domainName);
-                    lg2::info(cmd.c_str());
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
                     ofs.close();
@@ -654,7 +651,6 @@ int16_t Configuration::toRegister()
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(3));
         std::vector<std::string> domainNames = getDomainName(iName);
         if (domainNames.empty() && hostNameJustEnabled)
         {
@@ -677,7 +673,6 @@ int16_t Configuration::toRegister()
         auto i = 1;
         for (auto& domainName : domainNames)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
             std::vector<std::string> dnsServers = getDNSServer(iName);
             if (dnsServers.empty() && hostNameJustEnabled)
             {
@@ -724,28 +719,21 @@ int16_t Configuration::toRegister()
                             iName, "INDEX", i);
                         return -1;
                     }
-		    lg2::info("Created add file: {FILE}", "FILE",
-                              fmt::format("{}-add-{}-{}", NSUPDATE_TMP_FILE,
-                                          iName, i));
                     auto cmd = fmt::format("server {}\n", dns);
                     ofs << cmd;
-                    lg2::info(cmd.c_str());
                     cmd = fmt::format("update add {}.{} {} {} {}\n", hostname,
                                       domainName, TTL, ipv6 ? "AAAA" : "A", ip);
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
-                    lg2::info(cmd.c_str());
                     std::string revIP =
                         ipv6 == true ? getRevIPv6(ip) : getRevIPv4(ip);
                     cmd = fmt::format("update delete {} PTR\n", revIP);
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl;
-                    lg2::info(cmd.c_str());
                     cmd = fmt::format("update add {} {} PTR {}.{}\n", revIP,
                                       TTL, hostname, domainName);
                     // There must be a blank line between PTR and A/AAAA record
                     ofs << cmd << std::endl << "send" << std::endl;
-                    lg2::info(cmd.c_str());
                     ofs.close();
                     i++;
                 }
@@ -757,7 +745,6 @@ int16_t Configuration::toRegister()
         {
             std::lock_guard<std::mutex> lock(dnsMutex);
             dnsWorkq.push([iName, tsig, forceRegister]() {
-                std::this_thread::sleep_for(std::chrono::seconds(5));
                 if (tsig)
                 {
                     if (forceRegister)
@@ -864,6 +851,8 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                                           HOSTNAMED_INTF, "SetStaticHostname");
         method.append(hostname, /*interactive=*/false);
         bus.call(method);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        toRegister();
         for (auto it = manager.get().interfaces.begin();
              it != manager.get().interfaces.end(); it++)
         {
@@ -871,10 +860,8 @@ int16_t Configuration::setHostConf(bool hostSetting, std::string hostName)
                 it->second->interfaceName().find_first_of("eth") !=
                     std::string::npos)
                 manager.get().reconfigLink(it->second->getIfIdx());
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        toRegister();
 	NsupdateEnabledChanged = false;
     }
 
