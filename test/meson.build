@@ -53,16 +53,17 @@ tests = [
 ]
 
 run_with_tmp = find_program('run_with_tmp', native: true)
+run_test_with_setup = find_program('run_test_with_setup.sh', native: true)
 
 add_test_setup(
   'networkd',
-  exe_wrapper: run_with_tmp,
+  exe_wrapper: run_test_with_setup,
   env: {'TMPTMPL': 'phosphor-networkd-test.XXXXXXXXXX'},
   is_default: true)
 
 add_test_setup(
   'valgrind',
-  exe_wrapper: [run_with_tmp, 'valgrind'],
+  exe_wrapper: [run_test_with_setup, 'valgrind'],
   env: {'TMPTMPL': 'phosphor-networkd-test.XXXXXXXXXX'})
 
 foreach t : tests
