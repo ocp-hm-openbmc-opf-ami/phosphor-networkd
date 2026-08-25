@@ -91,6 +91,11 @@ const float DHCPv6_Timing_Param[2 * MAX_SUPPORTED_DHCPv6_TIMING_PARAMS] = {
 };
 #if ENABLE_BOND_SUPPORT
 const std::string bondIfcName = "bond0";
+bool shouldApplyBondMacOnBond0(std::string_view interface,
+                               std::string_view activeSlaveInterface)
+{
+    return interface == bondIfcName || interface == activeSlaveInterface;
+}
 #endif
 template <typename Func>
 inline decltype(std::declval<Func>()()) ignoreError(
@@ -2529,8 +2534,10 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
             // handle bonding mac address update for slave and bond
             if (bondEnabled)
             {
-                std::string intf = (interface == "bond0") ? "eth0" : interface;
-                if (intf == activeSlaveInterface)
+                // A MAC update on bond0 itself, or on the current active slave,
+                // must be applied through bond0's persisted configuration.
+                if (shouldApplyBondMacOnBond0(interface,
+                                              activeSlaveInterface)) 
                 {
                     for (const auto& [_, intf] : manager.get().interfaces)
                     {
@@ -2546,10 +2553,12 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 else // update mac address for slave of bonding interface when
                      // it is not active slave
                 {
-                    this->updateBondConfBackupForSlaveMAC(validMAC, intf);
+                    this->updateBondConfBackupForSlaveMAC(validMAC, interface);
                 }
                 std::this_thread::sleep_for(std::chrono::seconds(3));
-                execute("/sbin/reboot", "reboot", "-f");
+                // Use a systemd-managed reboot path so pending config and
+                // u-boot-env updates have a graceful shutdown/sync window
+                execute("/bin/systemctl", "systemctl", "reboot");
             }
             else
             {
