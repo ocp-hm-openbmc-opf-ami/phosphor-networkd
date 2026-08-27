@@ -24,6 +24,7 @@
 #include <xyz/openbmc_project/Common/error.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -75,6 +76,8 @@ constexpr auto sysctlConfigPrefix = "/proc/sys/net/ipv4/conf/";
 constexpr auto sysctlConfigSurffix = "/arp_ignore";
 std::string arpResponseDisable = "echo 8 >";
 std::string arpResponseEnable = "echo 0 >";
+
+static std::atomic_bool garpControlRestartHookPending{false};
 
 constexpr auto VLAN_MAX_NUM = 2;
 
@@ -3375,12 +3378,19 @@ void EthernetInterface::writeConfiguration()
         (ARPControlIface::arpResponse()) ? "true" : "false");
     config.writeFile(confPath.string());
 
-    manager.get().addReloadPostHook([]() {
-        execute("/bin/systemctl", "systemctl", "restart", garpControlService);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        execute("/bin/systemctl", "systemctl", "reset-failed",
-                garpControlService);
-    });
+    if (!garpControlRestartHookPending.exchange(true))
+    {
+        manager.get().addReloadPreHook(
+            []() { garpControlRestartHookPending.store(false); });
+        manager.get().addReloadPostHook([]() {
+            execute("/bin/systemctl", "systemctl", "restart",
+                    garpControlService);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            execute("/bin/systemctl", "systemctl", "reset-failed",
+                    garpControlService);
+        });
+    }
+
 }
 
 /** @brief set the ARP Response status in sysctl config for the ethernet
