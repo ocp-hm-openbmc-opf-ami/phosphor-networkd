@@ -46,7 +46,17 @@ conf_data.set10('AVAHI_SUPPORT', get_option('enable-avahi-support'))
 conf_data.set10('AMI_NCSI_MANUAL_DETECTION', get_option('ncsi-manual-detect'))
 conf_data.set10('DOH_SUPPORT', get_option('enable-doh-support'))
 
-sdbusplus_dep = dependency('sdbusplus')
+tests_opt = get_option('tests')
+if tests_opt.enabled()
+    sdbusplus_dep = subproject('sdbusplus').get_variable('sdbusplus_dep')
+    meson.override_dependency('sdbusplus', sdbusplus_dep)
+    phosphor_dbus_interfaces_dep = subproject('phosphor-dbus-interfaces-ami').get_variable('phosphor_dbus_interfaces_dep')
+    phosphor_logging_dep = subproject('phosphor-logging').get_variable('phosphor_logging_dep')
+    meson.override_dependency('phosphor-logging', phosphor_logging_dep)
+else
+    sdbusplus_dep = dependency('sdbusplus')
+    phosphor_dbus_interfaces_dep = dependency('phosphor-dbus-interfaces')
+endif
 sdbusplusplus_prog = find_program('sdbus++', native: true)
 sdbuspp_gen_meson_prog = find_program('sdbus++-gen-meson', native: true)
 sdbusplusplus_depfiles = files()
@@ -61,12 +71,36 @@ subdir('gen')
 subdir('gen/xyz')
 networkd_dbus_includes = include_directories('gen')
 
-phosphor_dbus_interfaces_dep = dependency('phosphor-dbus-interfaces')
+if tests_opt.enabled()
+  # Disable nsupdate feature during test builds: dns::Configuration spawns a
+  # background thread whose destructor calls std::thread::~thread() on a
+  # running thread, triggering std::terminate() / SIGABRT on teardown.
+  conf_data.set10('NSUPDATE_SUPPORT', false)
+  add_project_arguments('-DTEST_ENABLED', language: 'cpp')
+  add_project_arguments('-Wno-error=unused-variable', language: 'cpp')
+  add_project_arguments('-Wno-error=maybe-uninitialized', language: 'cpp')
+  add_project_arguments('-Wno-error=sign-compare', language: 'cpp')
+  add_project_arguments('-Wno-error=unused-result', language: 'cpp')
+  add_project_arguments('-Wno-error=missing-field-initializers', language: 'cpp')
+  add_project_arguments('-Wno-error=return-type', language: 'cpp')
+  add_project_arguments('-Wno-error=unused-parameter', language: 'cpp')
+  add_project_arguments('-Wno-error=parentheses', language: 'cpp')
+  add_project_arguments('-Wno-error=pessimizing-move', language: 'cpp')
+  add_project_arguments('-Wno-error=ignored-attributes', language: 'cpp')
+  add_project_arguments('-Wno-error=type-limits',language: 'cpp')
+  add_project_arguments('-Wno-error=catch-value=',language: 'cpp')
+  add_project_arguments('-Wno-error=nonnull-compare',language: 'cpp')
+  add_project_arguments('-Wno-error=switch', language: 'cpp')
+endif
 
 networkd_dbus_deps = [
   phosphor_dbus_interfaces_dep,
   sdbusplus_dep,
 ]
+
+if tests_opt.enabled()
+  networkd_dbus_deps += [phosphor_logging_dep, ]
+endif
 
 networkd_dbus_lib = static_library(
   'networkd_dbus',
