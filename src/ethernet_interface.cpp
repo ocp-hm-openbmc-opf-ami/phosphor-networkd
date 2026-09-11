@@ -1280,9 +1280,25 @@ std::vector<std::string> EthernetInterface::domainName(
 
     if (different)
     {
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toDeregister();
+#endif
+    try
+    {
         EthernetInterfaceIntf::domainName(value);
         writeConfigurationFile();
         manager.get().reloadConfigs();
+    }
+    catch (...)
+    {
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toRegister();
+#endif
+        throw;
+    }
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toRegister();
+#endif
         return value;
     }
     else
