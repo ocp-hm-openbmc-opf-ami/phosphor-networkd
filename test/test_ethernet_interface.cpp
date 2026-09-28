@@ -278,5 +278,23 @@ TEST_F(TestEthernetInterface, DHCPEnabled)
     set_test(DHCPConf::both, /*dhcp4=*/true, /*dhcp6=*/true, /*ra=*/true);
 }
 
+#if ENABLE_BOND_SUPPORT
+TEST(TestEthernetInterfaceBondMacLogic, UsesBondPathWhenTargetIsBond0)
+{
+    EXPECT_TRUE(shouldApplyBondMacOnBond0("bond0", "eth0"));
+}
+
+TEST(TestEthernetInterfaceBondMacLogic, UsesBondPathWhenTargetIsActiveSlave)
+{
+    EXPECT_TRUE(shouldApplyBondMacOnBond0("eth0", "eth0"));
+}
+
+TEST(TestEthernetInterfaceBondMacLogic,
+     UsesSlaveBackupPathWhenTargetIsInactiveSlave)
+{
+    EXPECT_FALSE(shouldApplyBondMacOnBond0("eth1", "eth0"));
+}
+#endif
+
 } // namespace network
 } // namespace phosphor

@@ -24,6 +24,7 @@
 #include <xyz/openbmc_project/Common/error.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -76,6 +77,8 @@ constexpr auto sysctlConfigSurffix = "/arp_ignore";
 std::string arpResponseDisable = "echo 8 >";
 std::string arpResponseEnable = "echo 0 >";
 
+static std::atomic_bool garpControlRestartHookPending{false};
+
 constexpr auto VLAN_MAX_NUM = 2;
 
 const float SLAAC_Timing_Param[2 * MAX_SUPPORTED_SLAAC_TIMING_PARAMS] = {
@@ -91,6 +94,11 @@ const float DHCPv6_Timing_Param[2 * MAX_SUPPORTED_DHCPv6_TIMING_PARAMS] = {
 };
 #if ENABLE_BOND_SUPPORT
 const std::string bondIfcName = "bond0";
+bool shouldApplyBondMacOnBond0(std::string_view interface,
+                               std::string_view activeSlaveInterface)
+{
+    return interface == bondIfcName || interface == activeSlaveInterface;
+}
 #endif
 template <typename Func>
 inline decltype(std::declval<Func>()()) ignoreError(
@@ -1272,9 +1280,25 @@ std::vector<std::string> EthernetInterface::domainName(
 
     if (different)
     {
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toDeregister();
+#endif
+    try
+    {
         EthernetInterfaceIntf::domainName(value);
         writeConfigurationFile();
         manager.get().reloadConfigs();
+    }
+    catch (...)
+    {
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toRegister();
+#endif
+        throw;
+    }
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toRegister();
+#endif
         return value;
     }
     else
@@ -2529,8 +2553,10 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
             // handle bonding mac address update for slave and bond
             if (bondEnabled)
             {
-                std::string intf = (interface == "bond0") ? "eth0" : interface;
-                if (intf == activeSlaveInterface)
+                // A MAC update on bond0 itself, or on the current active slave,
+                // must be applied through bond0's persisted configuration.
+                if (shouldApplyBondMacOnBond0(interface,
+                                              activeSlaveInterface)) 
                 {
                     for (const auto& [_, intf] : manager.get().interfaces)
                     {
@@ -2546,10 +2572,12 @@ std::string EthernetInterface::macAddress([[maybe_unused]] std::string value)
                 else // update mac address for slave of bonding interface when
                      // it is not active slave
                 {
-                    this->updateBondConfBackupForSlaveMAC(validMAC, intf);
+                    this->updateBondConfBackupForSlaveMAC(validMAC, interface);
                 }
                 std::this_thread::sleep_for(std::chrono::seconds(3));
-                execute("/sbin/reboot", "reboot", "-f");
+                // Use a systemd-managed reboot path so pending config and
+                // u-boot-env updates have a graceful shutdown/sync window
+                execute("/bin/systemctl", "systemctl", "reboot");
             }
             else
             {
@@ -3366,12 +3394,19 @@ void EthernetInterface::writeConfiguration()
         (ARPControlIface::arpResponse()) ? "true" : "false");
     config.writeFile(confPath.string());
 
-    manager.get().addReloadPostHook([]() {
-        execute("/bin/systemctl", "systemctl", "restart", garpControlService);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        execute("/bin/systemctl", "systemctl", "reset-failed",
-                garpControlService);
-    });
+    if (!garpControlRestartHookPending.exchange(true))
+    {
+        manager.get().addReloadPreHook(
+            []() { garpControlRestartHookPending.store(false); });
+        manager.get().addReloadPostHook([]() {
+            execute("/bin/systemctl", "systemctl", "restart",
+                    garpControlService);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            execute("/bin/systemctl", "systemctl", "reset-failed",
+                    garpControlService);
+        });
+    }
+
 }
 
 /** @brief set the ARP Response status in sysctl config for the ethernet
