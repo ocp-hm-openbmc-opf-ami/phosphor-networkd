@@ -34,6 +34,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace phosphor
@@ -79,6 +80,11 @@ class Manager;
 
 class TestEthernetInterface;
 class TestNetworkManager;
+
+#if ENABLE_BOND_SUPPORT
+bool shouldApplyBondMacOnBond0(std::string_view interface,
+                               std::string_view activeSlaveInterface);
+#endif
 
 namespace config
 {

@@ -83,14 +83,34 @@ std::string SystemConfiguration::hostName(std::string name)
     }
     try
     {
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toDeregister();
+#endif
         auto method = bus.get().new_method_call(
             HOSTNAMED_SVC, HOSTNAMED_OBJ, HOSTNAMED_INTF, "SetStaticHostname");
         method.append(name, /*interactive=*/false);
         method.call();
-        return SystemConfigIntf::hostName(std::move(name));
+        auto result = SystemConfigIntf::hostName(std::move(name));
+        for (auto it = manager.get().interfaces.begin();
+             it != manager.get().interfaces.end(); it++)
+        {
+            if (it->second->interfaceName().find(".") == std::string::npos &&
+                it->second->interfaceName().find_first_of("eth") !=
+                    std::string::npos)
+                manager.get().reconfigLink(it->second->getIfIdx());
+        }
+#if NSUPDATE_SUPPORT
+        auto& dnsConf = manager.get().getDNSConf();
+        dnsConf.hostConf(std::make_tuple(std::get<0>(dnsConf.hostConf()), result));
+        dnsConf.toRegister();
+#endif
+
     }
     catch (const sdbusplus::exception::SdBusError& e)
     {
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toRegister();
+#endif
         lg2::error("Failed to set hostname {HOSTNAME}: {ERROR} ", "HOSTNAME",
                    name, "ERROR", e);
         auto dbusError = e.get_error();
@@ -102,15 +122,14 @@ std::string SystemConfiguration::hostName(std::string name)
                                   Argument::ARGUMENT_VALUE(name.c_str()));
         }
     }
-
-    for (auto it = manager.get().interfaces.begin();
-         it != manager.get().interfaces.end(); it++)
+    catch (...)
     {
-        if (it->second->interfaceName().find(".") == std::string::npos &&
-            it->second->interfaceName().find_first_of("eth") !=
-                std::string::npos)
-            manager.get().reconfigLink(it->second->getIfIdx());
+#if NSUPDATE_SUPPORT
+        manager.get().getDNSConf().toRegister();
+#endif
+        throw;
     }
+
     return SystemConfigIntf::hostName();
 }
 
